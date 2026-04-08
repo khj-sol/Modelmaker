@@ -1,0 +1,25 @@
+# Python cache / bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+venv_bad_backup/
+.venv/
+
+# Local runtime/generated files
+output/
+uploads/
+*.log
+
+# Local model/cache artifacts
+.hf-cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.codex
+
+# Nested repository (keep separate)
+RTU_UDP_Systems/

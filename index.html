@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="data:," />
+  <title>Model Maker</title>
+  <style>
+    :root {
+      --bg: #f3efe4;
+      --panel: rgba(255, 251, 242, 0.88);
+      --ink: #1f2a1f;
+      --muted: #596357;
+      --line: rgba(31, 42, 31, 0.12);
+      --accent: #d9652b;
+      --accent-strong: #b44714;
+      --accent-soft: #f6d6c3;
+      --success: #2d6a4f;
+      --shadow: 0 28px 60px rgba(63, 43, 18, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans KR", "Pretendard", "Noto Sans KR", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(217, 101, 43, 0.16), transparent 32%),
+        linear-gradient(180deg, #f9f5ec 0%, #efe6d5 100%);
+      min-height: 100vh;
+    }
+
+    .shell {
+      width: min(1240px, calc(100vw - 32px));
+      margin: 24px auto 40px;
+      display: grid;
+      gap: 20px;
+    }
+
+    .hero,
+    .panel {
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: var(--shadow);
+      border-radius: 28px;
+    }
+
+    .hero {
+      overflow: hidden;
+      position: relative;
+      padding: 28px;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -60px;
+      top: -50px;
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(217, 101, 43, 0.26), rgba(217, 101, 43, 0));
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent-strong);
+      font-weight: 700;
+      font-size: 0.75rem;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: "Space Grotesk", "IBM Plex Sans KR", sans-serif;
+      font-size: clamp(2rem, 5vw, 4rem);
+      line-height: 0.95;
+      max-width: 840px;
+    }
+
+    .hero p {
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.65;
+      margin: 18px 0 0;
+    }
+
+    .status-strip,
+    .main-grid {
+      display: grid;
+      gap: 20px;
+    }
+
+    .status-strip {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .main-grid {
+      grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+      align-items: start;
+    }
+
+    .panel {
+      padding: 24px;
+    }
+
+    .panel h2,
+    .panel h3 {
+      margin: 0 0 12px;
+      font-family: "Space Grotesk", "IBM Plex Sans KR", sans-serif;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.55;
+    }
+
+    .badge-list,
+    .flow,
+    .preview-strip,
+    .warnings {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .badge,
+    .flow-card,
+    .status-card,
+    .warning {
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.64);
+    }
+
+    .badge,
+    .warning {
+      padding: 10px 14px;
+      font-size: 0.9rem;
+    }
+
+    .status-card {
+      padding: 16px 18px;
+      min-height: auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .status-card strong {
+      display: block;
+      margin-bottom: 0;
+      font-size: 1.05rem;
+    }
+
+    .status-copy {
+      min-width: 0;
+    }
+
+    .status-copy .small {
+      margin-top: 4px;
+    }
+
+    .flow {
+      margin-top: 18px;
+      align-items: stretch;
+    }
+
+    .flow-card {
+      flex: 1 1 180px;
+      padding: 18px;
+      position: relative;
+      transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .flow-card.active {
+      border-color: rgba(217, 101, 43, 0.6);
+      background: linear-gradient(180deg, rgba(246, 214, 195, 0.72), rgba(255,255,255,0.76));
+      transform: translateY(-3px);
+    }
+
+    .flow-index {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: inline-grid;
+      place-items: center;
+      background: var(--ink);
+      color: white;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+
+    .dropzone {
+      border: 2px dashed rgba(31, 42, 31, 0.16);
+      border-radius: 24px;
+      padding: 28px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.75), rgba(255, 248, 237, 0.92));
+      transition: border-color 0.2s ease, transform 0.2s ease;
+      cursor: pointer;
+    }
+
+    .dropzone.dragover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .drop-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .file-pill {
+      margin-top: 14px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+      background: rgba(31, 42, 31, 0.08);
+      font-size: 0.92rem;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+
+    button,
+    .link-button {
+      border: none;
+      border-radius: 999px;
+      padding: 13px 18px;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 0.2s ease, opacity 0.2s ease, background 0.2s ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    button:hover,
+    .link-button:hover {
+      transform: translateY(-1px);
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .primary {
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .secondary {
+      background: rgba(31, 42, 31, 0.08);
+      color: var(--ink);
+    }
+
+    .loader {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      margin-top: 16px;
+      color: var(--muted);
+    }
+
+    .loader.visible {
+      display: flex;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(31, 42, 31, 0.15);
+      border-top-color: var(--accent-strong);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 16px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .preview-strip img {
+      width: min(100%, 220px);
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 30px rgba(63, 43, 18, 0.12);
+      background: white;
+    }
+
+    .table-wrap,
+    pre {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(255,255,255,0.7);
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: 540px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 840px;
+    }
+
+    th,
+    td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid rgba(31, 42, 31, 0.08);
+      vertical-align: top;
+      font-size: 0.94rem;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: rgba(247, 242, 234, 0.96);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    pre {
+      margin: 0;
+      padding: 18px;
+      max-height: 420px;
+      overflow: auto;
+      font-size: 0.85rem;
+      line-height: 1.55;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin: 18px 0 14px;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      background: rgba(31, 42, 31, 0.08);
+      color: var(--ink);
+    }
+
+    .tab.active {
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    .empty {
+      padding: 26px;
+      border-radius: 20px;
+      border: 1px dashed rgba(31, 42, 31, 0.18);
+      color: var(--muted);
+      text-align: center;
+      background: rgba(255,255,255,0.54);
+    }
+
+    @media (max-width: 980px) {
+      .status-strip,
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero,
+      .panel {
+        padding: 20px;
+        border-radius: 22px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <p class="eyebrow">Solar Inverter Register Extraction</p>
+      <h1>PDF 매뉴얼에서 Modbus 레지스터 맵을 바로 추출합니다.</h1>
+      <p>
+        `example/output`의 Python 레지스터 맵 구조를 few-shot 기준으로 사용해 1단계 파싱 결과를 표와 JSON으로 검증할 수 있게 구성했습니다.
+        2단계는 `RTU_UDP_Systems` 기준으로 H01 매핑과 `READ_BLOCKS`를 확인하고, 3단계에서는 최종 `Register.py`를 생성해 바로 내려받을 수 있습니다.
+      </p>
+      <div class="flow" id="flowCards">
+        <article class="flow-card active" data-step="1">
+          <div class="flow-index">1</div>
+          <strong>PDF -> 레지스터 맵 파싱</strong>
+          <div class="small">PyMuPDF로 페이지를 이미지화하고 Gemma 비전 모델로 테이블을 JSON화합니다.</div>
+        </article>
+        <article class="flow-card" data-step="2">
+          <div class="flow-index">2</div>
+          <strong>UDP-서버 레지스터 매칭</strong>
+          <div class="small">`RTU_UDP_Systems/common` 모듈과 definitions를 기준으로 H01 매핑과 READ_BLOCKS를 보여줍니다.</div>
+        </article>
+        <article class="flow-card" data-step="3">
+          <div class="flow-index">3</div>
+          <strong>Register.py 생성</strong>
+          <div class="small">매칭된 RTU 레지스터 모듈을 기준으로 최종 Python 파일을 생성하고 코드 미리보기를 제공합니다.</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="status-strip">
+      <div class="status-card">
+        <div class="status-copy">
+          <strong>실행 환경</strong>
+          <div class="small" id="modelInfo">로딩 중...</div>
+        </div>
+        <div class="badge">3단계 워크플로우</div>
+      </div>
+    </section>
+
+    <section class="main-grid">
+      <section class="panel">
+        <h2>1단계 실행</h2>
+        <p class="small">PDF 업로드 후 버튼을 눌러 직접 파싱을 실행합니다. 결과는 아래 검증 패널에 즉시 표시됩니다.</p>
+
+        <label class="dropzone" id="dropzone">
+          <div class="drop-icon">PDF</div>
+          <strong>파일을 드롭하거나 클릭해서 업로드</strong>
+          <div class="small">대상은 태양광 인버터 Modbus 매뉴얼 PDF입니다.</div>
+          <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden />
+          <div id="filePill" class="file-pill" style="display:none;"></div>
+        </label>
+
+        <div class="actions">
+          <button id="pickButton" class="secondary" type="button">파일 선택</button>
+          <button id="runButton" class="primary" type="button" disabled>1단계 실행</button>
+          <button id="step2Button" class="secondary" type="button" disabled>2단계 실행</button>
+          <button id="step3Button" class="secondary" type="button" disabled>3단계 실행</button>
+        </div>
+
+        <div class="loader" id="loader">
+          <div class="spinner"></div>
+          <span>PDF 페이지 분석과 모델 추론을 수행 중입니다.</span>
+        </div>
+
+        <div class="warnings" id="warnings" style="margin-top:18px;"></div>
+      </section>
+
+      <section class="panel">
+        <div class="results-header">
+          <div>
+            <h2>검증 패널</h2>
+            <div class="small" id="resultMeta">아직 실행되지 않았습니다.</div>
+          </div>
+          <a id="downloadLink" class="link-button secondary" href="#" style="display:none;">엑셀 다운로드</a>
+          <a id="codeDownloadLink" class="link-button secondary" href="#" style="display:none;">Register.py 다운로드</a>
+        </div>
+
+        <div id="emptyState" class="empty">파싱 결과가 여기에 표시됩니다.</div>
+
+        <div id="resultContent" style="display:none;">
+          <div class="preview-strip" id="previewStrip"></div>
+
+          <div class="tabs">
+            <button class="tab active" type="button" data-tab="table">Table</button>
+            <button class="tab" type="button" data-tab="json">Raw JSON</button>
+            <button class="tab" type="button" data-tab="prompt">Prompt</button>
+            <button class="tab" type="button" data-tab="stage2">2단계 결과</button>
+            <button class="tab" type="button" data-tab="stage3">3단계 결과</button>
+          </div>
+
+          <section class="tab-panel active" data-panel="table">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr id="tableHead"></tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="tab-panel" data-panel="json">
+            <pre id="jsonOutput"></pre>
+          </section>
+
+          <section class="tab-panel" data-panel="prompt">
+            <pre id="promptOutput"></pre>
+          </section>
+
+          <section class="tab-panel" data-panel="stage2">
+            <div class="small" id="stage2Summary">2단계가 아직 실행되지 않았습니다.</div>
+            <div class="table-wrap" style="margin-top:14px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>H01 Field</th>
+                    <th>Source</th>
+                  </tr>
+                </thead>
+                <tbody id="stage2MapBody"></tbody>
+              </table>
+            </div>
+            <div style="margin-top:14px;">
+              <pre id="stage2BlocksOutput"></pre>
+            </div>
+          </section>
+
+          <section class="tab-panel" data-panel="stage3">
+            <div class="small" id="stage3Summary">3단계가 아직 실행되지 않았습니다.</div>
+            <div style="margin-top:14px;">
+              <pre id="stage3CodeOutput"></pre>
+            </div>
+          </section>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      filename: null,
+      config: null,
+      result: null,
+      stage2: null,
+      stage3: null,
+    };
+    const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:8000' : '';
+
+    const fileInput = document.getElementById('fileInput');
+    const dropzone = document.getElementById('dropzone');
+    const filePill = document.getElementById('filePill');
+    const pickButton = document.getElementById('pickButton');
+    const runButton = document.getElementById('runButton');
+    const step2Button = document.getElementById('step2Button');
+    const step3Button = document.getElementById('step3Button');
+    const loader = document.getElementById('loader');
+    const warnings = document.getElementById('warnings');
+    const resultMeta = document.getElementById('resultMeta');
+    const emptyState = document.getElementById('emptyState');
+    const resultContent = document.getElementById('resultContent');
+    const previewStrip = document.getElementById('previewStrip');
+    const tableHead = document.getElementById('tableHead');
+    const tableBody = document.getElementById('tableBody');
+    const jsonOutput = document.getElementById('jsonOutput');
+    const promptOutput = document.getElementById('promptOutput');
+    const downloadLink = document.getElementById('downloadLink');
+    const codeDownloadLink = document.getElementById('codeDownloadLink');
+    const stage2Summary = document.getElementById('stage2Summary');
+    const stage2MapBody = document.getElementById('stage2MapBody');
+    const stage2BlocksOutput = document.getElementById('stage2BlocksOutput');
+    const stage3Summary = document.getElementById('stage3Summary');
+    const stage3CodeOutput = document.getElementById('stage3CodeOutput');
+
+    async function init() {
+      bindEvents();
+      await loadConfig();
+    }
+
+    function bindEvents() {
+      pickButton.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', async (event) => {
+        const file = event.target.files[0];
+        if (file) {
+          await uploadFile(file);
+        }
+      });
+
+      ['dragenter', 'dragover'].forEach((eventName) => {
+        dropzone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          dropzone.classList.add('dragover');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach((eventName) => {
+        dropzone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          dropzone.classList.remove('dragover');
+        });
+      });
+
+      dropzone.addEventListener('drop', async (event) => {
+        const [file] = event.dataTransfer.files;
+        if (file) {
+          await uploadFile(file);
+        }
+      });
+
+      dropzone.addEventListener('click', (event) => {
+        if (event.target.tagName !== 'BUTTON') {
+          fileInput.click();
+        }
+      });
+
+      runButton.addEventListener('click', runStep1);
+      step2Button.addEventListener('click', runStep2);
+      step3Button.addEventListener('click', runStep3);
+
+      document.querySelectorAll('.tab').forEach((button) => {
+        button.addEventListener('click', () => setActiveTab(button.dataset.tab));
+      });
+    }
+
+    async function loadConfig() {
+      try {
+        const response = await fetch(`${API_BASE}/api/config`);
+        const config = await response.json();
+        state.config = config;
+
+        document.getElementById('modelInfo').textContent = `${config.model_id} / device: ${config.device}${config.model_error ? ` / warning: ${config.model_error}` : ''}`;
+      } catch (error) {
+        const message = error instanceof TypeError
+          ? '서버 연결 실패: run_model_maker.bat로 서버가 실행 중인지 확인하세요.'
+          : error.message;
+        document.getElementById('modelInfo').textContent = `설정 조회 실패: ${message}`;
+      }
+    }
+
+    async function uploadFile(file) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        renderWarnings(['PDF 파일만 업로드할 수 있습니다.']);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+      renderWarnings([]);
+
+      try {
+        const response = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: formData });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.detail || '업로드 실패');
+        }
+
+        state.filename = payload.filename;
+        state.result = null;
+        state.stage2 = null;
+        state.stage3 = null;
+        filePill.style.display = 'inline-flex';
+        filePill.textContent = `업로드 완료: ${payload.filename}`;
+        runButton.disabled = false;
+        step2Button.disabled = true;
+        step3Button.disabled = true;
+        downloadLink.style.display = 'none';
+        codeDownloadLink.style.display = 'none';
+        stage2Summary.textContent = '2단계가 아직 실행되지 않았습니다.';
+        stage2MapBody.innerHTML = '';
+        stage2BlocksOutput.textContent = '';
+        stage3Summary.textContent = '3단계가 아직 실행되지 않았습니다.';
+        stage3CodeOutput.textContent = '';
+        resultMeta.textContent = `업로드 대기 완료: ${payload.filename}`;
+      } catch (error) {
+        const message = error instanceof TypeError
+          ? '업로드 요청 실패: 서버가 꺼져 있거나 브라우저 연결이 끊어졌습니다.'
+          : error.message;
+        renderWarnings([message]);
+        runButton.disabled = true;
+      }
+    }
+
+    async function runStep1() {
+      if (!state.filename) {
+        return;
+      }
+
+      setBusy(true);
+      renderWarnings([]);
+
+      try {
+        const formData = new FormData();
+        formData.append('filename', state.filename);
+
+        const response = await fetch(`${API_BASE}/api/step1`, {
+          method: 'POST',
+          body: formData,
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.detail || '1단계 실행 실패');
+        }
+
+        state.result = payload;
+        renderResult(payload);
+        activateFlow(2);
+        step2Button.disabled = false;
+        step3Button.disabled = true;
+      } catch (error) {
+        const message = error instanceof TypeError
+          ? '1차 실행 요청 실패: 서버가 재시작됐거나 추론 중 중단됐습니다. 터미널 로그를 확인하세요.'
+          : error.message;
+        renderWarnings([message]);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function setBusy(isBusy) {
+      loader.classList.toggle('visible', isBusy);
+      runButton.disabled = isBusy || !state.filename;
+      step2Button.disabled = isBusy || !state.result;
+      step3Button.disabled = isBusy || !state.stage2;
+    }
+
+    function renderWarnings(items) {
+      warnings.innerHTML = '';
+      items.forEach((item) => {
+        const node = document.createElement('div');
+        node.className = 'warning';
+        node.textContent = item;
+        warnings.appendChild(node);
+      });
+    }
+
+    function activateFlow(stepNumber) {
+      document.querySelectorAll('.flow-card').forEach((card) => {
+        const cardStep = Number(card.dataset.step);
+        card.classList.toggle('active', cardStep === stepNumber);
+      });
+    }
+
+    function renderResult(result) {
+      emptyState.style.display = 'none';
+      resultContent.style.display = 'block';
+      resultMeta.textContent = `${result.filename} / 분석 페이지: ${result.pages_analyzed.join(', ')} / 추출 행 수: ${result.rows.length}`;
+
+      previewStrip.innerHTML = '';
+      result.page_previews.forEach((src, index) => {
+        const img = document.createElement('img');
+        img.src = src;
+        img.alt = `Analyzed page ${index + 1}`;
+        previewStrip.appendChild(img);
+      });
+
+      tableHead.innerHTML = '';
+      tableBody.innerHTML = '';
+      result.table_columns.forEach((column) => {
+        const th = document.createElement('th');
+        th.textContent = column;
+        tableHead.appendChild(th);
+      });
+
+      if (result.rows.length === 0) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = result.table_columns.length;
+        cell.textContent = '추출된 행이 없습니다.';
+        row.appendChild(cell);
+        tableBody.appendChild(row);
+      } else {
+        result.rows.forEach((item) => {
+          const row = document.createElement('tr');
+          result.table_columns.forEach((column) => {
+            const cell = document.createElement('td');
+            cell.textContent = item[column] ?? '';
+            row.appendChild(cell);
+          });
+          tableBody.appendChild(row);
+        });
+      }
+
+      jsonOutput.textContent = JSON.stringify(result.raw_json, null, 2);
+      promptOutput.textContent = result.prompt_preview;
+
+      if (result.excel_url) {
+        downloadLink.style.display = 'inline-flex';
+        downloadLink.href = result.excel_url;
+      } else {
+        downloadLink.style.display = 'none';
+      }
+      codeDownloadLink.style.display = 'none';
+
+      renderWarnings(result.warnings || []);
+      setActiveTab('table');
+    }
+
+    async function runStep2() {
+      if (!state.filename) {
+        return;
+      }
+
+      setBusy(true);
+      renderWarnings([]);
+
+      try {
+        const formData = new FormData();
+        formData.append('filename', state.filename);
+
+        const response = await fetch(`${API_BASE}/api/step2`, {
+          method: 'POST',
+          body: formData,
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.detail || '2단계 실행 실패');
+        }
+
+        state.stage2 = payload;
+        renderStage2(payload);
+        activateFlow(3);
+        step3Button.disabled = false;
+      } catch (error) {
+        const message = error instanceof TypeError
+          ? '2단계 요청 실패: 서버 연결이 끊겼습니다.'
+          : error.message;
+        renderWarnings([message]);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function renderStage2(result) {
+      stage2Summary.textContent = [
+        `manufacturer: ${result.manufacturer}`,
+        `module: ${result.module_name}`,
+        `mppt: ${result.mppt_channels ?? '-'}`,
+        `strings: ${result.string_channels ?? '-'}`,
+        `h01 mappings: ${result.h01_mappings.length}`,
+        `read blocks: ${result.read_blocks.length}`,
+        `alarm codes: ${result.alarm_code_count}`,
+      ].join(' / ');
+
+      stage2MapBody.innerHTML = '';
+      result.h01_mappings.forEach((item) => {
+        const row = document.createElement('tr');
+        const fieldCell = document.createElement('td');
+        fieldCell.textContent = item.h01_field;
+        const sourceCell = document.createElement('td');
+        sourceCell.textContent = item.source;
+        row.appendChild(fieldCell);
+        row.appendChild(sourceCell);
+        stage2MapBody.appendChild(row);
+      });
+
+      stage2BlocksOutput.textContent = JSON.stringify({
+        read_blocks: result.read_blocks,
+        status_definitions: result.status_definitions,
+        module_path: result.module_path,
+      }, null, 2);
+
+      if (result.excel_url) {
+        downloadLink.style.display = 'inline-flex';
+        downloadLink.href = result.excel_url;
+      }
+
+      renderWarnings(result.warnings || []);
+      setActiveTab('stage2');
+    }
+
+    async function runStep3() {
+      if (!state.filename) {
+        return;
+      }
+
+      setBusy(true);
+      renderWarnings([]);
+
+      try {
+        const formData = new FormData();
+        formData.append('filename', state.filename);
+
+        const response = await fetch(`${API_BASE}/api/step3`, {
+          method: 'POST',
+          body: formData,
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.detail || '3단계 실행 실패');
+        }
+
+        state.stage3 = payload;
+        renderStage3(payload);
+        activateFlow(3);
+      } catch (error) {
+        const message = error instanceof TypeError
+          ? '3단계 요청 실패: 서버 연결이 끊겼습니다.'
+          : error.message;
+        renderWarnings([message]);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function renderStage3(result) {
+      stage3Summary.textContent = [
+        `manufacturer: ${result.manufacturer}`,
+        `module: ${result.module_name}`,
+        `generated: ${result.generated_filename}`,
+        `lines: ${result.line_count}`,
+      ].join(' / ');
+
+      stage3CodeOutput.textContent = result.code_preview;
+
+      if (result.download_url) {
+        codeDownloadLink.style.display = 'inline-flex';
+        codeDownloadLink.href = result.download_url;
+      } else {
+        codeDownloadLink.style.display = 'none';
+      }
+
+      renderWarnings(result.warnings || []);
+      setActiveTab('stage3');
+    }
+
+    function setActiveTab(name) {
+      document.querySelectorAll('.tab').forEach((button) => {
+        button.classList.toggle('active', button.dataset.tab === name);
+      });
+
+      document.querySelectorAll('.tab-panel').forEach((panel) => {
+        panel.classList.toggle('active', panel.dataset.panel === name);
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
