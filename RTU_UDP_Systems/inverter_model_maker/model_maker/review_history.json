@@ -1,0 +1,9 @@
+{
+  "_version": "1.0",
+  "_description": "Stage 2 REVIEW 항목의 사용자 승인 이력.",
+  "approved": [],
+  "stats": {
+    "total_reviewed": 0,
+    "auto_applied": 0
+  }
+}

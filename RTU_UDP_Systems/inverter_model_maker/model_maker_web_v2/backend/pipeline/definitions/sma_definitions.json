@@ -1,0 +1,19 @@
+{
+  "_comment": "SMA SunSpec definitions — StVnd (Manufacturer Operating Status) in alarm_codes",
+  "status_definitions": {},
+  "alarm_codes": {
+    "0":  "Defective",
+    "10": "Boot loading",
+    "20": "Configuring SunSpec",
+    "30": "Waiting for parameters",
+    "40": "Sending settings",
+    "50": "Charging DC link",
+    "51": "Self test running",
+    "52": "Monitoring grid",
+    "53": "Waiting for reconnection",
+    "54": "Internal value",
+    "60": "Grid feed-in (operating)",
+    "70": "Fail-safe mode",
+    "80": "Standby"
+  }
+}

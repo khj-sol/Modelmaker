@@ -1,0 +1,9 @@
+Latest RTU firmware package:
+rtu_firmware_20260407_141927.tar.gz
+
+Reason:
+- Huawei running status register fixed to 0x9186
+- Startup/recovery H01 wait now follows communication_period (capped by 60s)
+
+Source of truth for RTU deployment:
+- Use the latest .tar.gz package in this folder for actual RTU firmware updates.

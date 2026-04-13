@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Sun rays -->
+  <g stroke="#FBBF24" stroke-width="2.5" stroke-linecap="round">
+    <line x1="32" y1="4" x2="32" y2="11"/>
+    <line x1="50" y1="10" x2="46" y2="16"/>
+    <line x1="58" y1="26" x2="51" y2="28"/>
+    <line x1="14" y1="10" x2="18" y2="16"/>
+    <line x1="6" y1="26" x2="13" y2="28"/>
+  </g>
+  <!-- Sun half-circle -->
+  <path d="M16 34 A16 16 0 0 1 48 34" fill="#FBBF24" opacity="0.85"/>
+  <!-- Solar panel base -->
+  <rect x="10" y="34" width="44" height="24" rx="3" fill="#2563EB"/>
+  <!-- Panel grid lines -->
+  <g stroke="#1E40AF" stroke-width="1.5">
+    <line x1="32" y1="34" x2="32" y2="58"/>
+    <line x1="21" y1="34" x2="21" y2="58"/>
+    <line x1="43" y1="34" x2="43" y2="58"/>
+    <line x1="10" y1="42" x2="54" y2="42"/>
+    <line x1="10" y1="50" x2="54" y2="50"/>
+  </g>
+  <!-- Panel highlight -->
+  <rect x="10" y="34" width="44" height="24" rx="3" fill="none" stroke="#3B82F6" stroke-width="1.5"/>
+</svg>

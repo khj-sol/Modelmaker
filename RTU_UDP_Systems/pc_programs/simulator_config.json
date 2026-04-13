@@ -1,0 +1,41 @@
+{
+  "port": "COM10",
+  "baudrate": 9600,
+  "devices": [
+    {
+      "slave_id": 1,
+      "type": "inverter",
+      "name": "Solarize Verterking",
+      "protocol": "solarize",
+      "model_id": 1
+    },
+    {
+      "slave_id": 2,
+      "type": "inverter",
+      "name": "Huawei SUN2000",
+      "protocol": "huawei",
+      "model_id": 2
+    },
+    {
+      "slave_id": 3,
+      "type": "inverter",
+      "name": "Kstar KSG-60KT",
+      "protocol": "kstar",
+      "model_id": 3
+    },
+    {
+      "slave_id": 4,
+      "type": "relay",
+      "name": "광성계측기 KDU",
+      "protocol": "relay",
+      "model_id": 1
+    },
+    {
+      "slave_id": 5,
+      "type": "weather",
+      "name": "SEM5046",
+      "protocol": "weather",
+      "model_id": 1
+    }
+  ]
+}

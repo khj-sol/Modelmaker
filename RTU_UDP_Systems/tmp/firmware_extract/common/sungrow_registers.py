@@ -1,0 +1,215 @@
+"""
+Sungrow SG Inverter Modbus Register Map
+Protocol: sungrow (Production)
+Based on sungrow_mm_registers.py reference
+Date: 2026-03-29
+"""
+
+
+class RegisterMap:
+    """Sungrow SG Modbus Register Map"""
+
+    # =========================================================================
+    # Periodic Basic Data
+    # =========================================================================
+    # PV_VOLTAGE: calculated by handler (MPPT voltage average, >= 100V)
+    # PV_CURRENT: calculated by handler (MPPT current sum)
+    INVERTER_MODE = 0x13AE      # U16
+    ERROR_CODE1 = 0x13AF      # U32
+    ERROR_CODE2 = 0x13B1      # U32
+    R_PHASE_VOLTAGE = 0x13A2      # U16, 0.1V
+    S_PHASE_VOLTAGE = 0x13A3      # U16, 0.1V
+    T_PHASE_VOLTAGE = 0x13A4      # U16, 0.1V
+    R_PHASE_CURRENT = 0x13A5      # U16, 0.1A
+    S_PHASE_CURRENT = 0x13A6      # U16, 0.1A
+    T_PHASE_CURRENT = 0x13A7      # U16, 0.1A
+    AC_POWER = 0x13A8      # S32, 1W
+    REACTIVE_POWER_LOW = 0x13AA      # S32, 1var
+    POWER_FACTOR = 0x13AC      # S16, 0.001
+    FREQUENCY = 0x13AD      # U16, 0.1Hz
+    INNER_TEMP = 0x13B4      # S16, 0.1C
+    TOTAL_ENERGY = 0x13B6      # U32, 0.1kWh
+    TODAY_ENERGY_L = 0x13B8      # U32, 0.1kWh
+    PV_POWER = 0x13BA      # U32, 1W
+
+    # =========================================================================
+    # MPPT Data
+    # =========================================================================
+    MPPT1_VOLTAGE = 0x139A      # U16, 0.1V
+    MPPT1_CURRENT = 0x139B      # U16, 0.1A
+    MPPT2_VOLTAGE = 0x139C      # U16, 0.1V
+    MPPT2_CURRENT = 0x139D      # U16, 0.1A
+    MPPT3_VOLTAGE = 0x139E      # U16, 0.1V
+    MPPT3_CURRENT = 0x139F      # U16, 0.1A
+    MPPT4_VOLTAGE = 0x13A0      # U16, 0.1V
+    MPPT4_CURRENT = 0x13A1      # U16, 0.1A
+
+    # =========================================================================
+    # STRING Data
+    # =========================================================================
+    # (no string data registers mapped)
+
+    # =========================================================================
+    # DER-AVM Control Values
+    # =========================================================================
+    DER_POWER_FACTOR_SET = 0x07D0      # S16, 0.001
+    DER_ACTION_MODE = 0x07D1      # U16
+    DER_REACTIVE_POWER_PCT = 0x07D2      # S16, 0.1%
+    DER_ACTIVE_POWER_PCT = 0x07D3      # U16, 0.1%
+    INVERTER_ON_OFF = 0x0834      # U16
+
+    # =========================================================================
+    # DEA-AVM Real-time Monitoring Data (0x03E8-0x03FD) - For H05 Body Type 14
+    # =========================================================================
+    DEA_L1_CURRENT_LOW = 0x03E8      # S32 low, scale 0.1A
+    DEA_L1_CURRENT_HIGH = 0x03E9      # S32 high
+    DEA_L2_CURRENT_LOW = 0x03EA      # S32 low, scale 0.1A
+    DEA_L2_CURRENT_HIGH = 0x03EB      # S32 high
+    DEA_L3_CURRENT_LOW = 0x03EC      # S32 low, scale 0.1A
+    DEA_L3_CURRENT_HIGH = 0x03ED      # S32 high
+    DEA_L1_VOLTAGE_LOW = 0x03EE      # S32 low, scale 0.1V
+    DEA_L1_VOLTAGE_HIGH = 0x03EF      # S32 high
+    DEA_L2_VOLTAGE_LOW = 0x03F0      # S32 low, scale 0.1V
+    DEA_L2_VOLTAGE_HIGH = 0x03F1      # S32 high
+    DEA_L3_VOLTAGE_LOW = 0x03F2      # S32 low, scale 0.1V
+    DEA_L3_VOLTAGE_HIGH = 0x03F3      # S32 high
+    DEA_TOTAL_ACTIVE_POWER_LOW = 0x03F4      # S32 low, scale 0.1kW
+    DEA_TOTAL_ACTIVE_POWER_HIGH = 0x03F5      # S32 high
+    DEA_TOTAL_REACTIVE_POWER_LOW = 0x03F6      # S32 low, scale 1 Var
+    DEA_TOTAL_REACTIVE_POWER_HIGH = 0x03F7      # S32 high
+    DEA_POWER_FACTOR_LOW = 0x03F8      # S32 low, scale 0.001
+    DEA_POWER_FACTOR_HIGH = 0x03F9      # S32 high
+    DEA_FREQUENCY_LOW = 0x03FA      # S32 low, scale 0.1Hz
+    DEA_FREQUENCY_HIGH = 0x03FB      # S32 high
+    DEA_STATUS_FLAG_LOW = 0x03FC      # U32 low, bit field
+    DEA_STATUS_FLAG_HIGH = 0x03FD      # U32 high
+
+    # --- Compatibility aliases ---
+    POWER_FACTOR_SET = DER_POWER_FACTOR_SET
+    OPERATION_MODE = DER_ACTION_MODE
+    REACTIVE_POWER_PCT = DER_REACTIVE_POWER_PCT
+    REACTIVE_POWER_SET = DER_REACTIVE_POWER_PCT
+    ACTIVE_POWER_PCT = DER_ACTIVE_POWER_PCT
+    INVERTER_CONTROL = INVERTER_ON_OFF
+
+    # --- Phase aliases (L1/L2/L3) ---
+    L1_VOLTAGE = R_PHASE_VOLTAGE
+    L2_VOLTAGE = S_PHASE_VOLTAGE
+    L3_VOLTAGE = T_PHASE_VOLTAGE
+    L1_CURRENT = R_PHASE_CURRENT
+    L2_CURRENT = S_PHASE_CURRENT
+    L3_CURRENT = T_PHASE_CURRENT
+
+    # --- Energy aliases ---
+    TOTAL_ENERGY_LOW = TOTAL_ENERGY
+    TODAY_ENERGY_LOW = TODAY_ENERGY_L
+
+
+class InverterMode:
+    """Solarize compatible InverterMode"""
+    INITIAL = 0x00
+    STANDBY = 0x01
+    ON_GRID = 0x03
+    OFF_GRID = 0x04
+    FAULT = 0x05
+    SHUTDOWN = 0x09
+
+    @classmethod
+    def to_string(cls, mode):
+        mode_map = {
+            0x00: "Initial", 0x01: "Standby", 0x03: "On-Grid",
+            0x04: "Off-Grid", 0x05: "Fault", 0x09: "Shutdown"
+        }
+        return mode_map.get(mode, f"Unknown({mode})")
+
+
+class SungrowSgStatusConverter:
+    """Default status converter for Sungrow SG."""
+
+    @classmethod
+    def to_inverter_mode(cls, raw):
+        """Map raw status to InverterMode (direct or STANDBY fallback)."""
+        valid = {0x00, 0x01, 0x03, 0x04, 0x05, 0x09}
+        return raw if raw in valid else 0x01
+
+
+StatusConverter = SungrowSgStatusConverter
+
+
+# Scale factors
+SCALE = {
+    'voltage': 0.1,
+    'current': 0.01,
+    'power': 1.0,
+    'frequency': 0.01,
+    'power_factor': 0.001,
+}
+
+
+def registers_to_u32(low, high):
+    """Combine two U16 to U32"""
+    return ((high & 0xFFFF) << 16) | (low & 0xFFFF)
+
+
+def registers_to_s32(low, high):
+    """Combine two U16 to S32"""
+    value = ((high & 0xFFFF) << 16) | (low & 0xFFFF)
+    if value >= 0x80000000:
+        value -= 0x100000000
+    return value
+
+
+def get_mppt_registers(mppt_num):
+    """Get (voltage, current) register addresses for MPPT number (1-4)"""
+    if mppt_num < 1 or mppt_num > 4:
+        raise ValueError(f"MPPT number must be 1-4, got {mppt_num}")
+    base = 0x139A + (mppt_num - 1) * 2
+    return (base, base + 1)
+
+
+def get_string_registers(string_num):
+    """Get (voltage, current) register addresses for string number (1-4)"""
+    if string_num < 1 or string_num > 4:
+        raise ValueError(f"String number must be 1-4, got {string_num}")
+    # Sungrow has no separate string registers; use MPPT registers
+    return get_mppt_registers(string_num)
+
+
+# Data type info per register
+DATA_TYPES = {
+    'INVERTER_MODE': 'U16',
+    'ERROR_CODE1': 'U32',
+    'ERROR_CODE2': 'U32',
+    'R_PHASE_VOLTAGE': 'U16',
+    'S_PHASE_VOLTAGE': 'U16',
+    'T_PHASE_VOLTAGE': 'U16',
+    'R_PHASE_CURRENT': 'U16',
+    'S_PHASE_CURRENT': 'U16',
+    'T_PHASE_CURRENT': 'U16',
+    'AC_POWER': 'S32',
+    'REACTIVE_POWER_LOW': 'S32',
+    'POWER_FACTOR': 'S16',
+    'FREQUENCY': 'U16',
+    'INNER_TEMP': 'S16',
+    'TOTAL_ENERGY': 'U32',
+    'TODAY_ENERGY_L': 'U32',
+    'PV_POWER': 'U32',
+    'MPPT1_VOLTAGE': 'U16',
+    'MPPT1_CURRENT': 'U16',
+    'MPPT2_VOLTAGE': 'U16',
+    'MPPT2_CURRENT': 'U16',
+    'MPPT3_VOLTAGE': 'U16',
+    'MPPT3_CURRENT': 'U16',
+    'MPPT4_VOLTAGE': 'U16',
+    'MPPT4_CURRENT': 'U16',
+    'STRING1_CURRENT': 'U16',
+    'STRING2_CURRENT': 'U16',
+    'STRING3_CURRENT': 'U16',
+    'STRING4_CURRENT': 'U16',
+    'STRING5_CURRENT': 'U16',
+    'STRING6_CURRENT': 'U16',
+    'STRING7_CURRENT': 'U16',
+    'STRING8_CURRENT': 'U16',
+}
+
+FLOAT32_FIELDS = set()

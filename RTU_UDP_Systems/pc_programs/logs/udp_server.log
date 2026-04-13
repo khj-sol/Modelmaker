@@ -1,0 +1,16 @@
+2026-04-06 13:20:09 [INFO] Server: Database initialized: C:\Users\shson\Desktop\New folder\RTU_UDP_Systems\pc_programs\udp_server.db
+2026-04-06 13:20:09 [INFO] Server: ============================================================
+2026-04-06 13:20:09 [INFO] Server:   RTU Production UDP Server V1.1.0
+2026-04-06 13:20:09 [INFO] Server:   Protocol: V3.0.1
+2026-04-06 13:20:09 [INFO] Server:   Listen: 0.0.0.0:13132
+2026-04-06 13:20:09 [INFO] Server:   DB: C:\Users\shson\Desktop\New folder\RTU_UDP_Systems\pc_programs\udp_server.db
+2026-04-06 13:20:09 [INFO] Server: ============================================================
+2026-04-06 13:20:09 [INFO] Server: Server started. Waiting for RTU connections...
+2026-04-07 17:18:53 [INFO] Server: Database initialized: C:\Users\shson\Desktop\New folder\RTU_UDP_Systems\pc_programs\udp_server.db
+2026-04-07 17:18:53 [INFO] Server: ============================================================
+2026-04-07 17:18:53 [INFO] Server:   RTU Production UDP Server V1.1.0
+2026-04-07 17:18:53 [INFO] Server:   Protocol: V3.0.1
+2026-04-07 17:18:53 [INFO] Server:   Listen: 0.0.0.0:13132
+2026-04-07 17:18:53 [INFO] Server:   DB: C:\Users\shson\Desktop\New folder\RTU_UDP_Systems\pc_programs\udp_server.db
+2026-04-07 17:18:53 [INFO] Server: ============================================================
+2026-04-07 17:18:53 [INFO] Server: Server started. Waiting for RTU connections...

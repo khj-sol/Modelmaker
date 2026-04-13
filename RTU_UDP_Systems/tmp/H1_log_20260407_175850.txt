@@ -1,0 +1,23 @@
+Captured at: 2026-04-07 17:58:50 Asia/Seoul
+
+H1 raw hex:
+01 58 5c 00 98 96 81 00 00 00 00 69 d4 c4 de 01 01 02 00 04 02 89 00 7f 00 00 1e cf 08 8b 08 97 08 8f 00 75 00 75
+00 76 00 00 1e 26 03 e8 02 58 00 00 00 01 49 da 62 00 00 01 00 00 00 00 00 00 04 19 5b 00 29 19 77 00 17 19 70 00
+28 19 29 00 16 08 00 18 00 11 00 17 00 00 00 16 00 11 00 16 00 00
+
+Decoded summary:
+- sequence: 0x585C
+- rtu_id: 10000001
+- timestamp(raw): 0x69D4C4DE
+- device_type: 1
+- device_number: 1
+- model: 2
+- body_type: 4
+- pv_voltage: 649 V
+- pv_current: 12.7 A
+- pv_power: 7887 W
+- ac_power: 7718 W
+- status: 0x0001 (Standby)
+
+Observation:
+- Power is present, but H1 status is still encoded as Standby.
