@@ -2998,6 +2998,40 @@ def _model_param_billions(model_name: str) -> float:
     return 14.0
 
 
+def _format_page_tables(tables: list) -> str:
+    """Render PyMuPDF-extracted tables as markdown pipe tables for LLM consumption."""
+    if not tables:
+        return ''
+    parts = []
+    for ti, table in enumerate(tables):
+        rows = [[('' if c is None else str(c)).strip() for c in row] for row in table if row]
+        rows = [r for r in rows if any(cell for cell in r)]
+        if not rows:
+            continue
+        col_count = max(len(r) for r in rows)
+        rows = [r + [''] * (col_count - len(r)) for r in rows]
+        lines = ['| ' + ' | '.join(r) + ' |' for r in rows]
+        if len(rows) > 1:
+            lines.insert(1, '| ' + ' | '.join(['---'] * col_count) + ' |')
+        parts.append(f'[Table {ti + 1}]\n' + '\n'.join(lines))
+    return '\n\n'.join(parts)
+
+
+def _extract_literal_scale(text: str) -> Optional[float]:
+    """Extract a literal scale marker from nearby register text when present."""
+    if not text:
+        return None
+    patterns = (
+        _re.compile(r'[xX×]\s*(\d+\.?\d*)', _re.I),
+        _re.compile(r'gain[:\s]+(\d+\.?\d*)', _re.I),
+    )
+    for pattern in patterns:
+        match = pattern.search(text)
+        if match:
+            return float(match.group(1))
+    return None
+
+
 def _pass1_extract_chunk(client, model: str, chunk_pages: list,
                          chunk_idx: int, progress_cb=None,
                          num_ctx: int = 32768, max_text: int = 60000) -> List[Dict]:
@@ -3008,6 +3042,8 @@ def _pass1_extract_chunk(client, model: str, chunk_pages: list,
 
     chunk_text = '\n\n'.join(
         f'--- Page {p["page"]} ---\n{p["text"]}'
+        + (f'\n\n[Extracted Tables - Page {p["page"]}]\n{_format_page_tables(p.get("tables"))}'
+           if p.get('tables') else '')
         for p in chunk_pages
     )[:max_text]
 
@@ -3015,6 +3051,7 @@ def _pass1_extract_chunk(client, model: str, chunk_pages: list,
 
 Extract every register that has an address and measurement data. Include monitoring, status, alarm, control, and device info registers.
 Exclude only: reserved/unused registers, communication settings (baud rate, slave address).
+When a '[Extracted Tables]' block is present for a page, prefer it over the raw page text for determining which value belongs to which column (address, name, scale, unit, etc.) because raw PDF text extraction can scramble column order, while tables preserve it.
 
 Output ONLY a JSON array. Each element must have these exact fields:
 - "address": hex string like "0x1037"
@@ -3071,11 +3108,133 @@ Document section:
             candidates = json.loads(text[start:end])
         else:
             candidates = json.loads(text) if text else []
+        if isinstance(candidates, list):
+            for candidate in candidates:
+                literal_scale = _extract_literal_scale(str(candidate.get('description', '')))
+                llm_scale = candidate.get('scale')
+                if literal_scale is None or not isinstance(llm_scale, (int, float)) or llm_scale <= 0:
+                    continue
+                if abs(literal_scale - llm_scale) / llm_scale <= 0.1:
+                    continue
+                candidate['scale'] = literal_scale
+                candidate['_scale_source'] = 'literal_regex'
         log(f'[Pass1 청크{chunk_idx}] {len(candidates)}개 후보 추출')
         return candidates if isinstance(candidates, list) else []
     except Exception as e:
         log(f'[Pass1 청크{chunk_idx}] 오류: {e}', 'warn')
         return []
+
+
+def _build_synonym_matched_register(candidate: Dict, synonym_match: Dict) -> Dict:
+    """Build a Pass2 register payload directly from a deterministic synonym match."""
+    return {
+        'address': candidate.get('address', ''),
+        'name': synonym_match.get('field', ''),
+        'data_type': candidate.get('data_type', ''),
+        'scale': candidate.get('scale'),
+        'unit': candidate.get('unit', ''),
+        'fc': candidate.get('fc'),
+        'rw': candidate.get('rw', 'R'),
+        'description': candidate.get('description', ''),
+        'category': synonym_match.get('category', ''),
+        'h01_field': synonym_match.get('h01_field') or None,
+    }
+
+
+def _build_pass2_few_shot_examples(reference_patterns: Dict[str, Dict[int, str]]) -> str:
+    """Build a small fixed few-shot block from existing mapped manufacturers."""
+    example_specs = (
+        {
+            'name': 'L1_VOLTAGE',
+            'category': 'MONITORING',
+            'h01_field': 'ac_voltage',
+            'data_type': 'U16',
+            'scale': 0.1,
+            'unit': 'V',
+            'description': 'L1 phase voltage',
+        },
+        {
+            'name': 'MPPT1_VOLTAGE',
+            'category': 'MONITORING',
+            'h01_field': 'pv_voltage',
+            'data_type': 'U16',
+            'scale': 0.1,
+            'unit': 'V',
+            'description': 'PV1 MPPT voltage',
+        },
+        {
+            'name': 'ACTIVE_POWER',
+            'category': 'MONITORING',
+            'h01_field': 'active_power',
+            'data_type': 'S32',
+            'scale': 0.1,
+            'unit': 'W',
+            'description': 'Active power output',
+        },
+        {
+            'name': 'INVERTER_MODE',
+            'category': 'STATUS',
+            'h01_field': 'inverter_mode',
+            'data_type': 'U16',
+            'scale': 1,
+            'unit': '',
+            'description': 'Inverter operating mode',
+        },
+        {
+            'name': 'ERROR_CODE1',
+            'category': 'ALARM',
+            'h01_field': 'error_code1',
+            'data_type': 'U16',
+            'scale': 1,
+            'unit': '',
+            'description': 'Primary inverter fault code',
+        },
+        {
+            'name': 'CUMULATIVE_ENERGY',
+            'category': 'MONITORING',
+            'h01_field': 'cumulative_energy',
+            'data_type': 'U32',
+            'scale': 0.1,
+            'unit': 'kWh',
+            'description': 'Total generated energy',
+        },
+    )
+    used_protocols = set()
+    example_lines = []
+    for spec in example_specs:
+        match = None
+        fallback = None
+        for protocol, addr_map in reference_patterns.items():
+            for address, attr_name in addr_map.items():
+                if attr_name != spec['name']:
+                    continue
+                candidate = (protocol, address)
+                if fallback is None:
+                    fallback = candidate
+                if protocol not in used_protocols:
+                    match = candidate
+                    break
+            if match is not None:
+                break
+        chosen = match or fallback
+        if chosen is None:
+            continue
+        protocol, address = chosen
+        used_protocols.add(protocol)
+        example = {
+            'address': f'0x{address:04X}',
+            'name': spec['name'],
+            'data_type': spec['data_type'],
+            'scale': spec['scale'],
+            'unit': spec['unit'],
+            'fc': 3,
+            'rw': 'R',
+            'description': spec['description'],
+            'category': spec['category'],
+            'h01_field': spec['h01_field'],
+        }
+        example_lines.append(f'{protocol}: {json.dumps(example, ensure_ascii=False)}')
+    return '\n'.join(example_lines)
 
 
 def _pass2_classify(client, model: str, candidates: List[Dict],
@@ -3085,7 +3244,36 @@ def _pass2_classify(client, model: str, candidates: List[Dict],
         if progress_cb:
             progress_cb(msg, level)
 
-    candidates_json = json.dumps(candidates, ensure_ascii=False)[:50000]
+    synonym_db = load_synonym_db()
+    reference_patterns = load_reference_patterns()
+    matched_results: List[Dict] = []
+    unmatched: List[Dict] = []
+    for candidate in candidates:
+        raw_name = str(candidate.get('raw_name', '')).strip()
+        synonym_match = match_synonym(raw_name, synonym_db)
+        if synonym_match is None:
+            fuzzy_match = match_synonym_fuzzy(raw_name, synonym_db, threshold=0.75)
+            if fuzzy_match and _h01_semantic_valid(fuzzy_match.get('h01_field', ''), raw_name):
+                synonym_match = fuzzy_match
+        if synonym_match is None:
+            unmatched.append(candidate)
+            continue
+        matched_results.append(_build_synonym_matched_register(candidate, synonym_match))
+
+    log(f'[Pass2] {len(matched_results)}개 synonym_db 매칭 (LLM 제외), {len(unmatched)}개 LLM 분류 대상')
+
+    if not unmatched:
+        return matched_results
+
+    candidates_json = json.dumps(unmatched, ensure_ascii=False)[:50000]
+    few_shot_examples = _build_pass2_few_shot_examples(reference_patterns)
+    few_shot_block = ''
+    if few_shot_examples:
+        few_shot_block = (
+            'Examples from previously-mapped manufacturers (for naming/classification convention '
+            'reference only - do not copy addresses):\n'
+            f'{few_shot_examples}\n\n'
+        )
 
     h01_fields = (
         'ac_voltage(L1/L2/L3), ac_current(L1/L2/L3), ac_power, frequency, '
@@ -3120,7 +3308,7 @@ Given the raw candidate registers below, perform these tasks:
 Output ONLY a valid JSON array. Each element:
 {{"address":"0x1037","name":"L1_VOLTAGE","data_type":"U16","scale":0.1,"unit":"V","fc":3,"rw":"R","description":"L1 phase voltage","category":"MONITORING","h01_field":"ac_voltage"}}
 
-Candidate registers:
+{few_shot_block}Candidate registers:
 {candidates_json}"""
 
     try:
@@ -3154,8 +3342,8 @@ Candidate registers:
             )
         raw = resp.get('message', {}).get('content', '') if isinstance(resp, dict) else resp.message.content
         if not raw or not raw.strip():
-            log('[Pass2] 빈 응답 — 후보 리스트 그대로 반환', 'warn')
-            return candidates
+            log('[Pass2] 빈 응답 — synonym matches만 반환하고 나머지는 raw 후보로 유지', 'warn')
+            return matched_results + unmatched
         text = raw.replace('```json', '').replace('```', '').strip()
         start = text.find('[')
         end = text.rfind(']') + 1
@@ -3166,11 +3354,60 @@ Candidate registers:
         for reg in result:
             if 'bits' in reg and isinstance(reg['bits'], dict):
                 reg['bits'] = {int(k): v for k, v in reg['bits'].items()}
-        log(f'[Pass2] {len(result)}개 레지스터 확정')
-        return result if isinstance(result, list) else []
+        llm_results = result if isinstance(result, list) else []
+        final = matched_results + llm_results
+        log(f'[Pass2] {len(final)}개 레지스터 확정')
+        return final
     except Exception as e:
         log(f'[Pass2] 오류: {e}', 'warn')
-        return []
+        return matched_results + unmatched
+
+
+_SCALE_CONVENTION = {
+    'ac_voltage': 0.1,
+    'pv_voltage': 0.1,
+    'ac_current': 0.01,
+    'pv_current': 0.01,
+    'ac_power': 0.1,
+    'active_power': 0.1,
+    'reactive_power': 0.1,
+    'frequency': 0.01,
+    'power_factor': 0.001,
+}
+
+
+def _validate_and_fix_scales(registers: List[Dict], log=None) -> List[Dict]:
+    """Flag or correct decade-scale mismatches against project conventions."""
+    fixed = 0
+    flagged = 0
+    for reg in registers:
+        h01 = (reg.get('h01_field') or '').lower()
+        convention = _SCALE_CONVENTION.get(h01)
+        scale = reg.get('scale')
+        if convention is None or not isinstance(scale, (int, float)) or scale <= 0:
+            continue
+        ratio = scale / convention
+        if 0.85 <= ratio <= 1.15:
+            continue
+        for decade in (10, 100, 1000):
+            if abs(ratio - decade) / decade < 0.1 or abs(ratio - 1 / decade) / (1 / decade) < 0.1:
+                reg['_scale_original'] = scale
+                reg['scale'] = convention
+                reg['_validation_note'] = (
+                    f'scale auto-corrected from {scale} to {convention} '
+                    f'(decade mismatch vs {h01} convention)'
+                )
+                fixed += 1
+                break
+        else:
+            reg['_validation_note'] = (
+                f'scale {scale} is {ratio:.1f}x the expected {h01} convention ({convention}) '
+                f'- flagged for manual review, not auto-corrected'
+            )
+            flagged += 1
+    if log and (fixed or flagged):
+        log(f'[Validate] scale auto-corrected {fixed}, flagged for manual review {flagged}')
+    return registers
 
 
 def _run_ai_pdf_extraction(pdf_path: str, ai_settings: dict,
@@ -3287,6 +3524,7 @@ def _run_ai_pdf_extraction(pdf_path: str, ai_settings: dict,
     # ── PASS 2: 분류·정제·H01 배정 ─────────────────────────────────────────
     log(f'[Pass2] 분류·정제 시작... ({len(deduped)}개 후보)')
     final_registers = _pass2_classify(client, model, deduped, progress, num_ctx=NUM_CTX)
+    final_registers = _validate_and_fix_scales(final_registers, progress)
     log(f'[Pass2] 최종 {len(final_registers)}개 레지스터 확정')
 
     return final_registers
