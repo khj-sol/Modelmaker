@@ -1,0 +1,1714 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- 브라우저 캐싱 방지: 코드 변경 즉시 반영 -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Model Maker Web v3 — Gemma 4 27B</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; }
+
+    header {
+      background: #1a1d27;
+      padding: 14px 24px;
+      border-bottom: 1px solid #2e3248;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header h1 { font-size: 18px; font-weight: 600; color: #a78bfa; }
+    header span { font-size: 12px; color: #ffffff; }
+
+    .pipeline {
+      display: flex;
+      gap: 0;
+      padding: 24px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .stage-card {
+      flex: 1;
+      background: #1a1d27;
+      border: 1px solid #2e3248;
+      border-radius: 8px;
+      margin: 0 8px;
+      overflow: hidden;
+    }
+    .stage-card.active { border-color: #7c3aed; }
+    .stage-card.done { border-color: #4ade80; }
+
+    .stage-header {
+      padding: 12px 16px;
+      background: #22263a;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .stage-badge {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: #2e3248;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700;
+    }
+    .stage-card.active .stage-badge { background: #7c3aed; color: #fff; }
+    .stage-card.done .stage-badge { background: #4ade80; color: #0f1117; }
+
+    .stage-body { padding: 16px; }
+
+    label { font-size: 12px; color: #ffffff; display: block; margin-bottom: 4px; margin-top: 12px; }
+    input[type=text], input[type=number], select {
+      width: 100%; padding: 7px 10px;
+      background: #0f1117; border: 1px solid #2e3248;
+      border-radius: 6px; color: #e0e0e0; font-size: 13px;
+    }
+    input:focus, select:focus { outline: none; border-color: #7eb8f7; }
+
+    .upload-area {
+      border: 2px dashed #2e3248;
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s;
+      margin-top: 12px;
+    }
+    .upload-area:hover { border-color: #7eb8f7; }
+    .upload-area.dragover { border-color: #7eb8f7; background: #1e2235; }
+    .upload-area p { font-size: 13px; color: #ffffff; margin-top: 6px; }
+    .upload-area .icon { font-size: 28px; }
+
+    button.run-btn {
+      width: 100%; margin-top: 16px;
+      padding: 9px;
+      background: #7c3aed; color: #fff;
+      border: none; border-radius: 6px;
+      font-size: 13px; font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button.run-btn:hover { background: #6d28d9; }
+    button.run-btn:disabled { background: #2e3248; color: #6b7280; cursor: not-allowed; }
+
+    .log-box {
+      background: #0f1117;
+      border: 1px solid #2e3248;
+      border-radius: 6px;
+      padding: 10px;
+      height: 160px;
+      overflow-y: auto;
+      font-size: 11px;
+      font-family: 'Consolas', monospace;
+      color: #a3e635;
+      margin-top: 12px;
+    }
+    .log-box .err { color: #f87171; }
+    .log-box .warn { color: #fbbf24; }
+    .log-box .ok { color: #4ade80; }
+
+    .result-chip {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      margin: 2px;
+    }
+    .chip-green { background: #14532d; color: #4ade80; }
+    .chip-red { background: #450a0a; color: #f87171; }
+    .chip-gray { background: #1f2937; color: #9ca3af; }
+
+    .arrow {
+      display: flex; align-items: center; color: #4b5563;
+      font-size: 20px; padding: 0 4px; flex-shrink: 0;
+    }
+
+    .review-section {
+      margin-top: 12px;
+      padding: 10px;
+      background: #12151f;
+      border: 1px solid #2e3248;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .review-section h4 { color: #fbbf24; margin-bottom: 8px; }
+    .review-row {
+      display: flex; gap: 6px; align-items: center;
+      padding: 4px 0; border-bottom: 1px solid #1e2235;
+    }
+    .review-row:last-child { border-bottom: none; }
+    .review-def { flex: 1; color: #e0e0e0; }
+    .review-reason { flex: 1; color: #ffffff; }
+    .review-verdict select {
+      width: auto; padding: 3px 6px; font-size: 11px;
+    }
+
+    .suggest-section {
+      margin-top: 12px;
+      padding: 10px;
+      background: #0d1117;
+      border: 1px solid #7eb8f7;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .suggest-section h4 { color: #7eb8f7; margin-bottom: 8px; font-size: 12px; }
+    .suggest-group {
+      margin-bottom: 10px;
+      padding: 8px;
+      background: #12151f;
+      border-radius: 4px;
+      border: 1px solid #2e3248;
+    }
+    .suggest-group-title {
+      font-size: 11px; font-weight: 700; color: #fbbf24;
+      margin-bottom: 6px;
+    }
+    .suggest-cand {
+      display: flex; align-items: center; gap: 6px;
+      padding: 3px 0; border-bottom: 1px solid #1e2235;
+      font-size: 11px;
+    }
+    .suggest-cand:last-child { border-bottom: none; }
+    .suggest-cand input[type=radio] { cursor: pointer; }
+    .suggest-cand .cand-addr { color: #64b5f6; min-width: 70px; }
+    .suggest-cand .cand-def { flex: 1; color: #e0e0e0; }
+    .suggest-cand .cand-reason { color: #ffffff; font-size: 10px; }
+    .suggest-apply-btn {
+      margin-top: 6px; padding: 4px 12px;
+      background: #1d4ed8; color: white;
+      border: none; border-radius: 4px;
+      font-size: 11px; cursor: pointer;
+    }
+    .suggest-apply-btn:hover { background: #2563eb; }
+    .suggest-skip-btn {
+      margin-top: 6px; margin-left: 6px; padding: 4px 10px;
+      background: #374151; color: #ffffff;
+      border: none; border-radius: 4px;
+      font-size: 11px; cursor: pointer;
+    }
+
+    .h01-mapping-section {
+      margin-top: 12px;
+      padding: 10px;
+      background: #12151f;
+      border: 1px solid #2e3248;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .h01-mapping-section h4 { color: #7eb8f7; margin-bottom: 6px; }
+    .h01-row {
+      display: grid;
+      grid-template-columns: 148px 1fr 46px;
+      gap: 6px;
+      align-items: center;
+      padding: 3px 0;
+      border-bottom: 1px solid #1e2235;
+    }
+    .h01-row:last-child { border-bottom: none; }
+    .h01-matched { color: #4ade80; font-family: 'Consolas', monospace; font-size: 11px; }
+    .h01-unmatched { color: #f87171; font-family: 'Consolas', monospace; font-size: 11px; }
+    .h01-source-tag {
+      display: inline-block;
+      font-size: 9px;
+      padding: 1px 5px;
+      margin-left: 4px;
+      border-radius: 3px;
+      font-family: 'Segoe UI', sans-serif;
+      font-weight: 600;
+      vertical-align: middle;
+    }
+    .h01-tag-auto { background:#16a34a; color:#fff; }   /* PDF/HANDLER 자동매칭 */
+    .h01-tag-der  { background:#0891b2; color:#fff; }   /* DER 매칭 */
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Model Maker V3 — Gemma 4</h1>
+  <span>Inverter Modbus PDF → RTU Register Map  |  Stage 1 → 2 → 3</span>
+  <span id="ollama-badge" style="display:none; margin-left:16px; padding:2px 10px; border-radius:4px; font-size:12px; font-weight:600;"></span>
+</header>
+
+<div class="pipeline">
+
+  <!-- ── Stage 1 ── -->
+  <div class="stage-card active" id="card-s1">
+    <div class="stage-header">
+      <div class="stage-badge">1</div>
+      Stage 1 — PDF / Excel 추출
+    </div>
+    <div class="stage-body">
+      <div class="upload-area" id="drop1" onclick="document.getElementById('file1').click()">
+        <div class="icon">📄</div>
+        <p>Modbus PDF 또는 Excel 파일을 드래그하거나 클릭하여 업로드</p>
+        <input type="file" id="file1" style="display:none" accept=".pdf,.xlsx,.xls" />
+      </div>
+      <label>설비 종류</label>
+      <select id="s1-device">
+        <option value="inverter">인버터</option>
+        <option value="relay">보호계전기</option>
+        <option value="weather">기상대/환경센서</option>
+      </select>
+      <label>AI 모드</label>
+      <select id="ai-mode-select" onchange="onAiModeChange()" style="border-color:#4c1d95;">
+        <option value="off">AI 사용 안 함 (Rule-based)</option>
+        <option value="e2b">Ollama — gemma4:e2b (가장 빠름)</option>
+        <option value="e4b" selected>Ollama — gemma4:e4b (빠름)</option>
+      </select>
+      <div id="ollama-settings" style="margin-top:8px; padding:10px; background:#12151f; border:1px solid #4c1d95; border-radius:6px;">
+        <div style="font-size:11px; font-weight:700; color:#a78bfa; margin-bottom:8px;">⚙ Ollama 설정</div>
+        <label style="margin-top:4px">Ollama Host</label>
+        <input type="text" id="ollama-host" value="http://localhost:11434" placeholder="http://localhost:11434" />
+        <button onclick="checkOllamaStatus()" style="margin-top:8px; width:100%; padding:5px; background:#4c1d95; color:#e9d5ff; border:none; border-radius:4px; font-size:12px; cursor:pointer;">🔍 연결 확인</button>
+      </div>
+      <button class="run-btn" id="btn-s1" disabled onclick="runStage1()">Stage 1 실행</button>
+      <div class="log-box" id="log-s1"><span style="color:#ffffff">-- 대기 중 --</span></div>
+      <div id="suggest-area" style="display:none">
+        <div class="suggest-section">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <h4 style="margin:0">💡 후보 제안</h4>
+            <button class="suggest-skip-btn" style="margin:0" onclick="selectAllSuggestions()">모두 선택</button>
+          </div>
+          <div id="suggest-groups"></div>
+          <div style="margin-top:10px;display:flex;gap:8px">
+            <button class="suggest-apply-btn" style="flex:1;padding:7px" onclick="applyAllSuggestions()">✅ 선택 항목 모두 적용 후 재실행</button>
+            <button class="suggest-skip-btn" onclick="skipAllSuggestions()">전체 건너뛰기</button>
+          </div>
+        </div>
+      </div>
+      <div id="info-mapping-area" style="display:none">
+        <div class="h01-mapping-section">
+          <h4 style="display:flex;justify-content:space-between;align-items:center">
+            <span>📋 INFO 매핑 (Model / SN)</span>
+            <span id="info-mapping-status" style="font-size:12px">-/-</span>
+          </h4>
+          <div style="font-size:11px;color:#9ca3af;margin-bottom:8px">
+            매칭된 Model/SN 레지스터를 확인하고 필요시 드롭다운으로 수정하세요.
+          </div>
+          <div id="info-mapping-table"></div>
+          <button class="run-btn" id="btn-save-info-mapping" onclick="saveInfoMapping()"
+                  style="background:#0891b2;color:#fff;margin-top:10px;padding:6px;font-size:12px">
+            💾 INFO 매핑 저장
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">▶</div>
+
+  <!-- ── Stage 2 ── -->
+  <div class="stage-card" id="card-s2">
+    <div class="stage-header">
+      <div class="stage-badge">2</div>
+      Stage 2 — 필터링 &amp; 매칭 검증
+    </div>
+    <div class="stage-body">
+      <div id="s2-import-area" style="margin-bottom:12px;">
+        <div style="font-size:11px;color:#9ca3af;text-align:center;margin-bottom:6px;">Stage 1 완료 후 자동 활성화 — 또는 직접 업로드</div>
+        <input type="file" id="s2-excel-input" accept=".xlsx,.xls" style="display:none" onchange="uploadStage1Excel(this)">
+        <button onclick="document.getElementById('s2-excel-input').click()"
+                style="width:100%;padding:7px;background:#1e293b;border:1px dashed #4b5563;border-radius:6px;color:#94a3b8;font-size:12px;cursor:pointer;">
+          📂 Stage 1 Excel 불러오기
+        </button>
+        <div id="s2-import-name" style="font-size:11px;color:#4ade80;margin-top:4px;text-align:center;display:none;"></div>
+      </div>
+      <label>MPPT 채널 수</label>
+      <input type="number" id="s2-mppt" min="1" max="12" value="4" />
+      <label>총 String 수 <span style="color:#94a3b8;font-size:10px">(MPPT와 독립, Growatt 등 비대칭 인버터 지원)</span></label>
+      <input type="number" id="s2-str" min="0" max="32" value="8" />
+      <label>용량 (파일명용, 예: 50kW)</label>
+      <input type="text" id="s2-cap" placeholder="50kW" />
+      <label>IV 데이터 포인트 수 (0=미지원)</label>
+      <input type="number" id="s2-iv-points" min="0" max="256" value="64" />
+      <button class="run-btn" id="btn-s2" disabled onclick="runStage2()">Stage 2 실행</button>
+      <div class="log-box" id="log-s2"><span style="color:#ffffff">-- Stage 1 완료 후 활성화 --</span></div>
+      <div id="review-area" style="display:none">
+        <div class="review-section">
+          <h4>⚠ REVIEW 항목 — 사용자 판정 필요</h4>
+          <div id="review-rows"></div>
+        </div>
+      </div>
+      <div id="mppt-mapping-area" style="display:none">
+        <div class="h01-mapping-section">
+          <h4 style="display:flex;justify-content:space-between;align-items:center">
+            <span>⚡ MPPT/String 매핑 (전압·전류)</span>
+            <span id="mppt-mapping-status" style="font-size:12px">-/-</span>
+          </h4>
+          <div style="font-size:11px;color:#9ca3af;margin-bottom:8px">
+            MPPT/String 전압·전류의 자동매칭을 확인하고 필요시 수정하세요.
+          </div>
+          <div id="mppt-mapping-table"></div>
+          <button class="run-btn" id="btn-save-mppt-mapping" onclick="saveMpptMapping()"
+                  style="background:#0891b2;color:#fff;margin-top:10px;padding:6px;font-size:12px">
+            💾 MPPT 매핑 저장
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">▶</div>
+
+  <!-- ── Stage 3 ── -->
+  <div class="stage-card" id="card-s3">
+    <div class="stage-header">
+      <div class="stage-badge">3</div>
+      Stage 3 — 코드 생성
+    </div>
+    <div class="stage-body">
+      <div id="s3-summary" style="font-size:12px; color:#ffffff; margin-top:8px;">
+        Stage 2 완료 후 활성화됩니다.
+      </div>
+      <div id="h01-mapping-area" style="display:none">
+        <div class="h01-mapping-section">
+          <h4 style="display:flex;justify-content:space-between;align-items:center">
+            <span>🔗 H01 매핑 확인/수정</span>
+            <span id="h01-mapping-status" style="font-size:12px">-/-</span>
+          </h4>
+          <div style="font-size:11px;color:#9ca3af;margin-bottom:8px">
+            자동매칭 결과를 확인하고 필요시 드롭다운으로 수정하세요.
+            <span style="color:#4ade80">✓ 초록</span>=매칭됨&nbsp;
+            <span style="color:#f87171">✗ 빨강</span>=미매칭
+          </div>
+          <div id="h01-mapping-table"></div>
+          <button class="run-btn" id="btn-save-mapping" onclick="saveH01Mapping()"
+                  style="background:#f59e0b;color:#0f1117;margin-top:10px">
+            💾 매핑 저장 후 Stage 3 활성화
+          </button>
+        </div>
+      </div>
+      <div id="stage4-result" style="display:none; margin-top:12px; padding:10px; background:#0d1b2a; border:1px solid #1e40af; border-radius:6px; font-size:12px">
+        <div id="stage4-grade" style="font-size:13px; font-weight:700; margin-bottom:6px"></div>
+        <div id="stage4-details" style="color:#cbd5e1; line-height:1.6"></div>
+      </div>
+      <button class="run-btn" id="btn-s3" disabled onclick="runStage3()">Stage 3 실행 — registers.py 생성</button>
+      <div class="log-box" id="log-s3"><span style="color:#ffffff">-- Stage 2 완료 후 활성화 --</span></div>
+      <div id="s3-download" style="display:none; margin-top:12px; text-align:center;">
+        <a id="dl-link" href="#" style="color:#4ade80; font-size:13px; font-weight:700;">
+          ⬇ registers.py 다운로드
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Detect if running inside dashboard iframe (proxy at /api/mm2-app/).
+  // When proxied, API calls must go through the proxy path, not root /api.
+  const _isProxied = window.location.pathname.includes('/mm2-app');
+  const API = _isProxied ? '/api/mm2-app/api' : '/api';
+  // AI mode: read from select UI
+  function _aiMode() { return document.getElementById('ai-mode-select').value !== 'off'; }
+  function _aiModel() {
+    const v = document.getElementById('ai-mode-select').value;
+    if (v === 'e2b') return 'gemma4:e2b';
+    if (v === 'e4b') return 'gemma4:e4b';
+    return '';
+  }
+  function onAiModeChange() {
+    const isAi = _aiMode();
+    const settings = document.getElementById('ollama-settings');
+    if (settings) settings.style.display = isAi ? 'block' : 'none';
+    const badge = document.getElementById('ollama-badge');
+    if (!isAi && badge) { badge.style.display = 'none'; }
+    if (isAi) checkOllamaStatus();
+  }
+  // Init: show ollama settings (26b selected by default)
+  setTimeout(() => {
+    onAiModeChange();
+  }, 0);
+
+  async function checkOllamaStatus() {
+    const badge = document.getElementById('ollama-badge');
+    if (badge) { badge.style.display = 'inline'; badge.textContent = '⏳ Ollama 확인 중...'; badge.style.background = '#374151'; badge.style.color = '#d1d5db'; }
+    try {
+      const mdl = _aiModel();
+      const host = (document.getElementById('ollama-host') || {}).value || '';
+      const qs = new URLSearchParams();
+      if (mdl) qs.set('model', mdl);
+      if (host) qs.set('host', host);
+      const r = await fetch(`${API}/ai/status?${qs}`);
+      const d = await r.json();
+      if (d.connected && d.model_available) {
+        if (badge) { badge.textContent = `✅ Ollama (${d.model})`; badge.style.background = '#14532d'; badge.style.color = '#4ade80'; }
+        appendLog('s1', `✅ Ollama 연결됨 — 모델: ${d.model}`, 'ok');
+      } else if (d.connected) {
+        if (badge) { badge.textContent = `⚠ Ollama 연결됨 (모델 없음)`; badge.style.background = '#451a03'; badge.style.color = '#fbbf24'; }
+        appendLog('s1', `⚠ Ollama 연결됨이나 모델(${d.model}) 미설치 — ollama pull ${d.model} 실행 필요`, 'warn');
+      } else {
+        if (badge) { badge.textContent = '❌ Ollama 미연결'; badge.style.background = '#450a0a'; badge.style.color = '#f87171'; }
+        appendLog('s1', `❌ Ollama 연결 실패 (${d.host}) — Ollama 실행 필요`, 'err');
+      }
+    } catch (err) {
+      if (badge) { badge.textContent = '❌ Ollama 오류'; badge.style.background = '#450a0a'; badge.style.color = '#f87171'; }
+      appendLog('s1', `❌ Ollama 상태 확인 오류: ${err.message}`, 'err');
+    }
+  }
+  let sessionId = null;
+  let ws = null;
+  let uploadedFilename = null;
+
+  // ─── 세션 초기화 (F5 복원 포함) ───────────────────────────────
+  (async () => {
+    let restored = false;
+    const savedSid  = sessionStorage.getItem('mm_session_id');
+    const savedOrig = sessionStorage.getItem('mm_orig_name');   // 원본 파일명 (표시용)
+    const savedFile = sessionStorage.getItem('mm_filename');    // 서버 저장 파일명
+
+    if (savedSid && savedOrig && savedFile) {
+      try {
+        const chk = await fetch(`${API}/session/${savedSid}`);
+        if (chk.ok) {
+          const s = await chk.json();
+          if (s.uploaded_file) {
+            // 세션 복원
+            sessionId        = savedSid;
+            uploadedFilename = savedFile;
+            document.getElementById('drop1').querySelector('p').textContent = `✓ ${savedOrig}`;
+            document.getElementById('btn-s1').disabled = false;
+            if (s.stage >= 1) {
+              document.getElementById('card-s1').className = 'stage-card done';
+              document.getElementById('card-s2').className = 'stage-card active';
+              document.getElementById('btn-s2').disabled = false;
+              // INFO 매핑 패널 자동 로드
+              setTimeout(() => loadInfoMapping(), 100);
+            }
+            if (s.stage >= 2) {
+              document.getElementById('card-s2').className = 'stage-card done';
+              document.getElementById('card-s3').className = 'stage-card active';
+              document.getElementById('btn-s3').disabled = false;
+              const _ivPts = parseInt(sessionStorage.getItem('mm_iv_points') || '0');
+              if (_ivPts > 0) setTimeout(() => loadMpptMapping(), 100);
+            }
+            appendLog('s1', `[F5 복원] ${savedOrig} — 이전 작업을 이어서 실행할 수 있습니다.`, 'info');
+            restored = true;
+          }
+        }
+      } catch (_) { /* 서버 재시작 등으로 세션 없음 → 새 세션 생성 */ }
+    }
+
+    if (!restored) {
+      const r = await fetch(`${API}/session/new`, { method: 'POST' });
+      const d = await r.json();
+      sessionId = d.session_id;
+      sessionStorage.setItem('mm_session_id', sessionId);
+      sessionStorage.removeItem('mm_filename');
+      sessionStorage.removeItem('mm_orig_name');
+    }
+
+    const _wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const _wsPath = _isProxied ? `/api/mm2-app/api/ws/${sessionId}` : `/api/ws/${sessionId}`;
+    ws = new WebSocket(`${_wsProto}//${location.host}${_wsPath}`);
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      appendLog(msg.stage, msg.text, msg.level);
+      if (msg.event === 'already_verified') onAlreadyVerified(msg);
+      if (msg.event === 'stage1_done') onStage1Done(msg);
+      if (msg.event === 'stage2_done') onStage2Done(msg);
+      if (msg.event === 'stage3_done') onStage3Done(msg);
+      if (msg.event === 'review_items') showReview(msg.items);
+      if (msg.event === 'invalid_file') onInvalidFile(msg);
+    };
+  })();
+
+  // ─── 파일 업로드 ───────────────────────────────────────────────
+  const fileInput = document.getElementById('file1');
+  const drop1 = document.getElementById('drop1');
+
+  fileInput.addEventListener('change', async () => {
+    if (fileInput.files.length === 0) return;
+    await uploadFile(fileInput.files[0]);
+  });
+  drop1.addEventListener('dragover', e => { e.preventDefault(); drop1.classList.add('dragover'); });
+  drop1.addEventListener('dragleave', () => drop1.classList.remove('dragover'));
+  drop1.addEventListener('drop', async e => {
+    e.preventDefault(); drop1.classList.remove('dragover');
+    if (e.dataTransfer.files.length) await uploadFile(e.dataTransfer.files[0]);
+  });
+
+  async function uploadFile(file) {
+    // 새 파일 → 전체 초기화
+    clearLog('s1'); clearLog('s2'); clearLog('s3');
+    document.getElementById('review-area').style.display = 'none';
+    document.getElementById('review-rows').innerHTML = '';
+    document.getElementById('s3-summary').innerHTML = '';
+    document.getElementById('s3-download').style.display = 'none';
+    document.getElementById('suggest-area').style.display = 'none';
+    document.getElementById('suggest-groups').innerHTML = '';
+    document.getElementById('s2-import-name').style.display = 'none';
+    document.getElementById('h01-mapping-area').style.display = 'none';
+    document.getElementById('h01-mapping-table').innerHTML = '';
+    document.getElementById('card-s1').className = 'stage-card active';
+    document.getElementById('card-s2').className = 'stage-card';
+    document.getElementById('card-s3').className = 'stage-card';
+    document.getElementById('btn-s1').disabled = true;
+    document.getElementById('btn-s2').disabled = true;
+    document.getElementById('btn-s3').disabled = true;
+
+    try {
+      const fd = new FormData();
+      fd.append('session_id', sessionId);
+      fd.append('file', file);
+      const r = await fetch(`${API}/stage1/upload`, { method: 'POST', body: fd });
+      if (!r.ok) throw new Error(`업로드 실패: ${r.status}`);
+      const d = await r.json();
+      uploadedFilename = d.filename;
+      sessionStorage.setItem('mm_filename', uploadedFilename);
+      sessionStorage.setItem('mm_orig_name', file.name);
+      drop1.querySelector('p').textContent = `✓ ${file.name}`;
+    } catch (err) {
+      appendLog('s1', `파일 업로드 오류: ${err.message}`, 'err');
+      drop1.querySelector('p').textContent = '파일을 드래그하거나 클릭하여 업로드';
+    } finally {
+      document.getElementById('btn-s1').disabled = !uploadedFilename;
+    }
+  }
+
+  // ─── Stage 실행 ────────────────────────────────────────────────
+  let _s1ProgressTimer = null;
+  async function runStage1() {
+    const btn = document.getElementById('btn-s1');
+    const origText = btn.textContent;
+    btn.disabled = true;
+    clearLog('s1');
+    // Show AI mode status immediately in log
+    const aiOn = _aiMode();
+    const aiMdl = _aiModel();
+    if (aiOn) {
+      appendLog('s1', `🤖 AI Mode — Ollama ${aiMdl} 2-Pass 추출 시작`, 'ok');
+      appendLog('s1', '  Pass 1: PDF 청크별 후보 추출 (병렬) → Pass 2: 분류·정제·H01 매핑', 'info');
+      btn.textContent = '🤖 AI 분석 중...';
+      btn.style.background = '#7c3aed';
+      // Periodic progress indicator (AI can take 1-3min for 2-Pass)
+      let dots = 0;
+      let elapsed = 0;
+      _s1ProgressTimer = setInterval(() => {
+        dots = (dots + 1) % 4;
+        elapsed += 5;
+        const phases = [
+          [0,  'PDF 텍스트 추출 중'],
+          [5,  '[Pass 1] Gemma — 청크별 후보 추출 중'],
+          [20, '[Pass 1] 병렬 추출 진행 중 (청크 처리)'],
+          [40, '[Pass 2] Gemma — 분류·정제·H01 매핑 중'],
+          [70, '[Pass 2] 최종 레지스터 선별 중'],
+          [100, '거의 완료... 결과 처리 중'],
+        ];
+        let phase = phases[0][1];
+        for (const [t, msg] of phases) { if (elapsed >= t) phase = msg; }
+        btn.textContent = `🤖 ${phase}${'.'.repeat(dots)}`;
+      }, 5000);
+    } else {
+      appendLog('s1', 'Rule-based 파싱 모드 (AI Mode OFF)', 'info');
+      btn.textContent = '실행 중...';
+    }
+    appendLog('s1', `Stage 1 실행 중... (${uploadedFilename})`, 'info');
+    try {
+      const ollamaHost = (document.getElementById('ollama-host') || {}).value || '';
+      await fetch(`${API}/stage1/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          filename: uploadedFilename,
+          device_type: document.getElementById('s1-device').value,
+          use_ai: aiOn,
+          ollama_host: ollamaHost || undefined,
+          ollama_model: aiMdl || undefined,
+        }),
+      });
+    } finally {
+      if (_s1ProgressTimer) { clearInterval(_s1ProgressTimer); _s1ProgressTimer = null; }
+      btn.textContent = origText;
+      btn.style.background = '';
+    }
+  }
+
+  async function uploadStage1Excel(input) {
+    const file = input.files[0];
+    if (!file) return;
+    input.value = '';
+    const fd = new FormData();
+    fd.append('session_id', sessionId);
+    fd.append('file', file);
+    try {
+      const r = await fetch(`${API}/stage2/upload`, { method: 'POST', body: fd });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.detail || r.status); }
+      document.getElementById('s2-import-name').textContent = `✓ ${file.name}`;
+      document.getElementById('s2-import-name').style.display = 'block';
+      document.getElementById('card-s2').className = 'stage-card active';
+      document.getElementById('btn-s2').disabled = false;
+      appendLog('s2', `Stage 1 Excel 로드: ${file.name}`, 'ok');
+    } catch (err) {
+      appendLog('s2', `업로드 오류: ${err.message}`, 'err');
+    }
+  }
+
+  async function runStage2() {
+    document.getElementById('btn-s2').disabled = true;
+    clearLog('s2');
+    await fetch(`${API}/stage2/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        mppt: parseInt(document.getElementById('s2-mppt').value),
+        total_strings: parseInt(document.getElementById('s2-str').value),
+        capacity: document.getElementById('s2-cap').value,
+        iv_data_points: parseInt(document.getElementById('s2-iv-points').value),
+      }),
+    });
+  }
+
+  async function runStage3() {
+    document.getElementById('btn-s3').disabled = true;
+    clearLog('s3');
+    await fetch(`${API}/stage3/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+  }
+
+  // ─── 이벤트 핸들러 ─────────────────────────────────────────────
+  let _skipNextSuggestions = false;  // 제안 적용 재실행 후 제안 화면 건너뜀
+
+  const _SUGGEST_LABELS = {
+    'info_model':          'INFO: Model 레지스터 미발견',
+    'info_sn':             'INFO: SN 레지스터 미발견',
+    'cumulative_energy':   'H01: cumulative_energy (누적발전량) X',
+    'status':              'H01: status (인버터 상태) X',
+    'alarm1':              'H01: alarm1 (알람 코드) X',
+    'pv_power':            'H01: pv_power (DC 전력) X',
+    'status_definitions':  'STATUS 값 정의 테이블 없음',
+    'alarm_definitions':   'ALARM 값 정의 테이블 없음',
+    'mppt_detection':      'MPPT 채널 감지 실패 (MPPT=0)',
+    'iv_scan':             'IV Scan 레지스터 미발견',
+  };
+
+  function onInvalidFile(msg) {
+    // 업로드 영역 초기화 — 다시 파일을 올릴 수 있도록
+    uploadedFilename = null;
+    sessionStorage.removeItem('mm_filename');
+    sessionStorage.removeItem('mm_orig_name');
+    const drop1 = document.getElementById('drop1');
+    drop1.querySelector('p').textContent = '파일을 드래그하거나 클릭하여 업로드';
+    document.getElementById('btn-s1').disabled = true;
+    document.getElementById('suggest-area').style.display = 'none';
+
+    // 경고 배너 표시
+    const banner = document.createElement('div');
+    banner.style.cssText = [
+      'background:#fff3cd', 'border:2px solid #ffc107', 'border-radius:8px',
+      'padding:14px 16px', 'margin:10px 0', 'color:#856404', 'font-size:14px',
+      'white-space:pre-line', 'line-height:1.6',
+    ].join(';');
+    banner.innerHTML = `<strong>⚠️ 올바른 파일이 아닙니다</strong><br>${(msg.text||'').replace(/\n/g,'<br>')}`;
+    const logEl = document.getElementById('log-s1');
+    logEl.insertBefore(banner, logEl.firstChild);
+  }
+
+  function onAlreadyVerified(msg) {
+    const logEl = document.getElementById('log-s1');
+    const banner = document.createElement('div');
+    banner.style.cssText = [
+      'background:#052e16','border:2px solid #4ade80','border-radius:8px',
+      'padding:14px 18px','margin:10px 0','color:#bbf7d0','font-size:14px',
+      'line-height:1.7',
+    ].join(';');
+    const h01ok = msg.h01_matched === msg.h01_total;
+    const derOk = msg.der_matched === msg.der_total;
+    const h01txt = h01ok
+      ? '<span style="color:#4ade80;font-weight:700">OK</span>'
+      : `<span style="color:#f87171">${msg.h01_matched}/${msg.h01_total}</span>`;
+    const dertxt = derOk
+      ? '<span style="color:#4ade80;font-weight:700">OK</span>'
+      : `<span style="color:#f87171">${msg.der_matched}/${msg.der_total}</span>`;
+    banner.innerHTML =
+      `<strong style="font-size:15px;color:#4ade80">✓ 이미 검증된 인버터</strong>
+       &nbsp;<span style="color:#86efac;font-size:12px">(${msg.date || ''})</span><br>
+       <span style="color:#d1fae5"><b>${msg.manufacturer}</b> — ${msg.pdf_filename}</span><br>
+       H01: ${h01txt} &nbsp;|&nbsp; DER: ${dertxt}
+       &nbsp;|&nbsp; MPPT: ${msg.max_mppt} &nbsp;String: ${msg.max_string}<br>
+       <span style="color:#86efac;font-size:12px">Stage 1 분석을 계속 진행합니다 (결과 확인 / Stage 2 진행 가능)</span>`;
+    logEl.insertBefore(banner, logEl.firstChild);
+  }
+
+  function onStage1Done(msg) {
+    const ivField = document.getElementById('s2-iv-points');
+    if (!msg.iv_scan) {
+      ivField.value = '0';
+    } else {
+      ivField.value = String(msg.iv_data_points || 64);
+    }
+    sessionStorage.setItem('mm_iv_points', ivField.value);
+
+    // Stage 1 자동 감지값으로 Stage 2 MPPT/총 String 입력 미리 채움
+    // (사용자가 인버터에 따라 직접 수정 가능)
+    const detMppt = parseInt(msg.max_mppt) || 0;
+    const detStr  = parseInt(msg.max_string) || 0;
+    if (detMppt > 0) {
+      const mEl = document.getElementById('s2-mppt');
+      mEl.value = detMppt;
+      mEl.style.background = '#1e3a2a';
+      mEl.style.borderColor = '#86efac';
+    }
+    if (detStr > 0) {
+      const sEl = document.getElementById('s2-str');
+      sEl.value = detStr;
+      sEl.style.background = '#1e3a2a';
+      sEl.style.borderColor = '#86efac';
+    }
+    if (detMppt > 0 || detStr > 0) {
+      appendLog('s1',
+        `Stage 1 자동 감지: MPPT ${detMppt} / 총 String ${detStr} — Stage 2 입력란에 미리 채움 (필요시 수정)`,
+        'info');
+    }
+
+    // 상 타입 감지 결과 표시 (단상/삼상/공통)
+    const phaseType = msg.phase_type || 'unknown';
+    const phaseLabel = {
+      'single':  '단상 (1-phase / 2-wire)',
+      'three':   '삼상 (3-phase)',
+      'both':    '단상/삼상 공통 (런타임 구분)',
+      'unknown': '미확인',
+    }[phaseType] || phaseType;
+    const phaseColor = {
+      'single':  'info',
+      'three':   'info',
+      'both':    'warn',
+      'unknown': 'warn',
+    }[phaseType] || 'warn';
+    appendLog('s1', `상 타입: ${phaseLabel}`, phaseColor);
+
+    appendLog('s1', `카테고리: ${Object.entries(msg.counts||{}).filter(([k,v])=>v>0).map(([k,v])=>`${k}:${v}`).join(' ')}`, 'ok');
+
+    // Stage 1 검증: 인버터 모델명 + SN 레지스터 존재 여부
+    const im = msg.info_match || {};
+    const modelOk = im.model === true;
+    const snOk    = im.sn    === true;
+    const modelMark = modelOk ? '✓' : '✗';
+    const snMark    = snOk ? '✓' : '✗';
+    // Stage 1 PASS = Model + SN 모두 매칭
+    const stage1_pass = modelOk && snOk;
+    const level = stage1_pass ? 'ok' : 'warn';
+    appendLog('s1',
+      `Stage 1 검증: ${stage1_pass ? '✅ PASS' : '⚠ WARN'}  Model ${modelMark}  SN ${snMark}` +
+      (!modelOk ? '  (모델명 레지스터 미발견)' : '') +
+      (modelOk && !snOk ? '  (SN 레지스터 미발견)' : ''),
+      level);
+
+    if (msg.review_count > 0) {
+      appendLog('s1', `REVIEW ${msg.review_count}개 — Stage 2에서 확인`, 'warn');
+    }
+
+    // INFO 매핑 패널 자동 로드 (Stage 1 완료 시)
+    loadInfoMapping();
+
+    // 제안 표시 (적용 후 재실행이면 건너뜀)
+    const sugg = msg.suggestions || {};
+    const keys = Object.keys(sugg);
+    if (keys.length > 0 && !_skipNextSuggestions) {
+      appendLog('s1', `후보 제안 ${keys.length}개 항목`, 'warn');
+      showSuggestions(sugg);
+    } else {
+      _skipNextSuggestions = false;
+      document.getElementById('suggest-area').style.display = 'none';
+      document.getElementById('card-s1').className = 'stage-card done';
+      document.getElementById('card-s2').className = 'stage-card active';
+      document.getElementById('btn-s2').disabled = false;
+    }
+  }
+
+  function showSuggestions(sugg) {
+    const area = document.getElementById('suggest-area');
+    const groups = document.getElementById('suggest-groups');
+    groups.innerHTML = '';
+
+    const actionable = {};
+    const infoOnly = {};
+
+    for (const [field, data] of Object.entries(sugg)) {
+      // 새 형식: {why, candidates} / 구형식: 배열
+      const cands = Array.isArray(data) ? data : (data.candidates || []);
+      const why   = Array.isArray(data) ? '' : (data.why || '');
+
+      if (cands.length === 1 && cands[0].score === 0) {
+        infoOnly[field] = { ...cands[0], why };
+      } else {
+        actionable[field] = { cands, why };
+      }
+    }
+
+    // Actionable 제안 (radio 선택)
+    for (const [field, { cands, why }] of Object.entries(actionable)) {
+      const label = _SUGGEST_LABELS[field] || field;
+      const div = document.createElement('div');
+      div.className = 'suggest-group';
+      div.dataset.field = field;
+
+      let html = `<div class="suggest-group-title">⚡ ${label}</div>`;
+      if (why) {
+        html += `<div style="color:#94a3b8;font-size:10px;margin:4px 0 6px;padding:5px 8px;background:#1e2235;border-radius:4px;line-height:1.5">${why.replace(/\n/g,'<br>')}</div>`;
+      }
+      cands.slice(0, 5).forEach((c, i) => {
+        html += `<div class="suggest-cand">
+          <input type="radio" name="sg-${field}" value="${i}" id="sg-${field}-${i}">
+          <span class="cand-addr">${c.addr}</span>
+          <span class="cand-def">${c.definition}</span>
+          <span class="cand-reason">${c.reason}${c.score > 0 ? ' ('+c.score+'점)' : ''}</span>
+        </div>`;
+      });
+      html += `<button class="suggest-skip-btn" style="margin-top:4px" onclick="skipSuggestion('${field}', this.closest('.suggest-group'))">이 항목 제외</button>`;
+      div.innerHTML = html;
+      groups.appendChild(div);
+    }
+
+    // 정보성 메시지
+    for (const [field, info] of Object.entries(infoOnly)) {
+      const label = _SUGGEST_LABELS[field] || field;
+      const div = document.createElement('div');
+      div.className = 'suggest-group';
+      div.style.borderColor = '#6b7280';
+      let html = `<div class="suggest-group-title" style="color:#ffffff">ℹ ${label}</div>`;
+      if (info.why) {
+        html += `<div style="color:#ffffff;font-size:10px;margin-bottom:4px;line-height:1.5">${info.why.replace(/\n/g,'<br>')}</div>`;
+      }
+      html += `<div style="color:#ffffff;font-size:11px">${info.reason}</div>`;
+      div.innerHTML = html;
+      groups.appendChild(div);
+    }
+
+    if (groups.children.length > 0) {
+      area.style.display = 'block';
+    }
+
+    // actionable 없으면 바로 Stage 2 활성화
+    if (Object.keys(actionable).length === 0) {
+      document.getElementById('card-s1').className = 'stage-card done';
+      document.getElementById('card-s2').className = 'stage-card active';
+      document.getElementById('btn-s2').disabled = false;
+    } else {
+      // Stage 1 done이지만 Stage 2는 제안 처리 전 or 직접 넘어가기 허용
+      document.getElementById('card-s1').className = 'stage-card done';
+      document.getElementById('card-s2').className = 'stage-card active';
+      document.getElementById('btn-s2').disabled = false;
+    }
+  }
+
+  // 모두 선택: 각 그룹의 첫 번째 라디오 선택
+  function selectAllSuggestions() {
+    document.querySelectorAll('.suggest-group[data-field]').forEach(group => {
+      const first = group.querySelector('input[type=radio]');
+      if (first) first.checked = true;
+    });
+  }
+
+  // 선택 항목 모두 적용 후 재실행 (batch)
+  async function applyAllSuggestions() {
+    const groups = document.querySelectorAll('.suggest-group[data-field]');
+    const items = [];
+    groups.forEach(group => {
+      const field = group.dataset.field;
+      const selected = group.querySelector(`input[name="sg-${field}"]:checked`);
+      if (!selected) return;
+      const idx = parseInt(selected.value);
+      const cands = group.querySelectorAll('.suggest-cand');
+      const cand = cands[idx];
+      if (!cand) return;
+      const addr = cand.querySelector('.cand-addr').textContent.trim();
+      const def = cand.querySelector('.cand-def').textContent.trim();
+      items.push({ field, definition: def, addr });
+    });
+
+    if (items.length === 0) {
+      appendLog('s1', '적용할 항목이 없습니다. 먼저 후보를 선택해주세요.', 'warn');
+      return;
+    }
+
+    appendLog('s1', `[일괄 적용] ${items.length}개 항목 synonym_db 등록 중...`, 'info');
+
+    // 각 항목을 rerun=false로 적용 (마지막만 rerun=true)
+    for (let i = 0; i < items.length; i++) {
+      const { field, definition, addr } = items[i];
+      const isLast = i === items.length - 1;
+      appendLog('s1', `  → ${field}: ${definition}`, 'info');
+      const r = await fetch(`${API}/stage1/apply-suggestion`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          session_id: sessionId,
+          field, definition, addr,
+          rerun: isLast,
+        }),
+      });
+      await r.json();
+    }
+
+    _skipNextSuggestions = true;  // 재실행 후 제안 화면 건너뜀
+    document.getElementById('suggest-area').style.display = 'none';
+    clearLog('s1');
+  }
+
+  // 전체 건너뛰기: suggest-area 숨기고 Stage 2 활성화
+  function skipAllSuggestions() {
+    document.getElementById('suggest-area').style.display = 'none';
+    appendLog('s1', '[전체 건너뜀] 제안 없이 Stage 2 진행', 'info');
+    document.getElementById('card-s1').className = 'stage-card done';
+    document.getElementById('card-s2').className = 'stage-card active';
+    document.getElementById('btn-s2').disabled = false;
+  }
+
+  async function applySuggestion(field) {
+    const selected = document.querySelector(`input[name="sg-${field}"]:checked`);
+    if (!selected) {
+      appendLog('s1', `[${field}] 후보를 선택해주세요`, 'warn');
+      return;
+    }
+    const idx = parseInt(selected.value);
+    const group = document.querySelector(`.suggest-group[data-field="${field}"]`);
+    if (!group) return;
+    const cands = group.querySelectorAll('.suggest-cand');
+    const cand = cands[idx];
+    if (!cand) return;
+    const addr = cand.querySelector('.cand-addr').textContent.trim();
+    const def = cand.querySelector('.cand-def').textContent.trim();
+
+    appendLog('s1', `[제안 적용] ${field} → ${def} (${addr})`, 'info');
+
+    const r = await fetch(`${API}/stage1/apply-suggestion`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        session_id: sessionId,
+        field, definition: def, addr, rerun: true,
+      }),
+    });
+    const d = await r.json();
+    if (d.status === 'rerunning') {
+      document.getElementById('suggest-area').style.display = 'none';
+      clearLog('s1');
+    }
+  }
+
+  function skipSuggestion(field, groupEl) {
+    appendLog('s1', `[건너뜀] ${field}`, 'info');
+    groupEl.remove();
+    const groups = document.getElementById('suggest-groups');
+    const actionable = groups.querySelectorAll('.suggest-group[data-field]');
+    if (actionable.length === 0) {
+      document.getElementById('suggest-area').style.display = 'none';
+    }
+  }
+
+  function fmtMatch(matched, total) {
+    if (matched === total) return '<span style="color:#4ade80;font-weight:700">OK</span>';
+    return `<span style="color:#f87171">${matched}/${total}</span>`;
+  }
+
+  function onStage2Done(msg) {
+    // Stage 2 버튼 재활성화 (사용자가 MPPT/String 수 조정 후 재실행 가능)
+    document.getElementById('btn-s2').disabled = false;
+
+    const h01ok = msg.h01_matched === msg.h01_total;
+    const derOk = msg.der_matched === msg.der_total;
+    appendLog('s2',
+      `H01: ${msg.h01_matched}/${msg.h01_total}  DER: ${msg.der_matched}/${msg.der_total}`,
+      h01ok && derOk ? 'ok' : 'warn');
+
+    // Stage 2 검증: MPPT 전압/전류 + String 전압/전류 추출 여부
+    // (H01 pv_voltage/pv_current/pv_power 매핑의 기반)
+    const v = msg.stage2_validation || {};
+    const mppt_v = v.mppt_voltage || {found:0, expected:0};
+    const mppt_i = v.mppt_current || {found:0, expected:0};
+    const str_v  = v.string_voltage || {found:0, expected:0};
+    const str_i  = v.string_current || {found:0, expected:0};
+    const mark = (f, e) => {
+      if (e === 0) return '-';
+      if (f >= e) return '✓';
+      if (f > 0)  return '⚠';
+      return '✗';
+    };
+    const mpptOk = mppt_v.found >= mppt_v.expected && mppt_i.found >= mppt_i.expected;
+    const lvl = mpptOk ? 'ok' : 'warn';
+    appendLog('s2',
+      `검증: MPPT V ${mark(mppt_v.found, mppt_v.expected)} ${mppt_v.found}/${mppt_v.expected}  `
+      + `MPPT I ${mark(mppt_i.found, mppt_i.expected)} ${mppt_i.found}/${mppt_i.expected}  `
+      + `String V ${mark(str_v.found, str_v.expected)} ${str_v.found}/${str_v.expected}  `
+      + `String I ${mark(str_i.found, str_i.expected)} ${str_i.found}/${str_i.expected}`,
+      lvl);
+
+    // 추출 카운트 vs 사용자 입력 비교 (총 String 수 직접 입력 모드)
+    // 주의: 자동으로 입력 필드를 덮어쓰지 않는다 (사용자 의도 보존)
+    const mppt_actual = Math.max(mppt_v.found, mppt_i.found);
+    const str_actual = Math.max(str_v.found, str_i.found);
+    const mppt_input = parseInt(document.getElementById('s2-mppt').value) || 0;
+    const total_str_input = parseInt(document.getElementById('s2-str').value) || 0;
+
+    let needsRerun = false;
+    let suggestion = '';
+    if (mppt_actual > 0 && mppt_actual !== mppt_input) {
+      suggestion += `MPPT 채널: 입력 ${mppt_input} → 실제 추출 <b style="color:#86efac">${mppt_actual}</b>  `;
+      needsRerun = true;
+    }
+    if (str_actual !== total_str_input) {
+      suggestion += `String 총수: 입력 ${total_str_input} → 실제 추출 <b style="color:#86efac">${str_actual}</b>  `;
+      needsRerun = true;
+    }
+    if (needsRerun) {
+      appendLog('s2',
+        `💡 입력값과 실제 추출 카운트가 다릅니다. ${suggestion}`,
+        'warn');
+      appendLog('s2',
+        `→ MPPT/String 수를 확인 후 필요시 'Stage 2 실행' 다시 클릭 (입력값은 자동변경되지 않음)`,
+        'warn');
+      // 색상만 강조 — 값은 건드리지 않음
+      ['s2-mppt', 's2-str'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.style.background = '#3a2a1e';
+          el.style.borderColor = '#fbbf24';
+        }
+      });
+    } else {
+      // 입력값이 정확함 — 입력 필드 색 초기화
+      ['s2-mppt', 's2-str'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.style.background = ''; el.style.borderColor = ''; }
+      });
+    }
+
+    // IV Scan 검증: 지원 인버터에 한해
+    const iv = v.iv_scan || {};
+    if (iv.supported) {
+      const cmdMark = iv.command_found ? '✓' : '✗';
+      const expTrk = iv.expected_trackers || 0;
+      const resCount = iv.result_count || 0;
+      const trkMark = (expTrk > 0 && resCount >= expTrk) ? '✓' :
+                      (resCount > 0 ? '⚠' : '✗');
+      const ivLvl = (iv.command_found && resCount > 0) ? 'ok' : 'warn';
+      appendLog('s2',
+        `IV Scan: 명령 ${cmdMark}  결과레지스터 ${trkMark} ${resCount}개  `
+        + `(트래커 ${expTrk}, 데이터포인트 ${iv.data_points || 0})`,
+        ivLvl);
+    }
+
+    // Stage 2 최종 PASS 판정 (MPPT + String + IV)
+    const stage2_pass = msg.stage2_pass === true;
+    const fail_reasons = msg.fail_reasons || [];
+    appendLog('s2',
+      `Stage 2 검증: ${stage2_pass ? '✅ PASS' : '⚠ WARN — ' + fail_reasons.join(', ')}`,
+      stage2_pass ? 'ok' : 'warn');
+
+    if (msg.review_count > 0 && msg.review_items && msg.review_items.length > 0) {
+      appendLog('s2', `REVIEW ${msg.review_count}개 — 판정 후 H01 매핑 확인`, 'warn');
+      showReview(msg.review_items);
+      document.getElementById('card-s2').className = 'stage-card done';
+      document.getElementById('s3-summary').innerHTML =
+        `H01 ${fmtMatch(msg.h01_matched, msg.h01_total)}  |  DER ${fmtMatch(msg.der_matched, msg.der_total)}` +
+        `<br><span style="color:#fbbf24">REVIEW ${msg.review_count}개 미결</span>`;
+      return; // REVIEW 판정 → H01 매핑 → Stage 3
+    }
+
+    // 재실행 필요해도 Stage 3 수동 매핑 UI 를 표시해 사용자가 직접 매핑 가능하게 함
+    // (Deye 같이 PDF parsing 이 복잡한 인버터는 자동 추출이 부족해도 수동으로 완성 가능)
+    document.getElementById('card-s2').className = 'stage-card done';
+    document.getElementById('card-s3').className = 'stage-card active';
+    if (needsRerun) {
+      document.getElementById('s3-summary').innerHTML =
+        `H01 ${fmtMatch(msg.h01_matched, msg.h01_total)}  |  DER ${fmtMatch(msg.der_matched, msg.der_total)}` +
+        `<br><span style="color:#fbbf24;font-size:11px">⚠ 추출 카운트 부족 — 수동 매핑 또는 Stage 2 재실행 권장</span>`;
+    } else {
+      document.getElementById('s3-summary').innerHTML =
+        `H01 ${fmtMatch(msg.h01_matched, msg.h01_total)}  |  DER ${fmtMatch(msg.der_matched, msg.der_total)}`;
+    }
+    loadH01Mapping(); // H01 매핑 확인 화면 표시 (Stage 3 버튼은 저장 후 활성화)
+    const _ivPts2 = parseInt(document.getElementById('s2-iv-points').value) || 0;
+    if (_ivPts2 > 0) {
+      loadMpptMapping(); // MPPT/String 매핑 패널 표시 (Stage 2 카드)
+    } else {
+      appendLog('s2', 'IV=0 — MPPT/String 매핑 건너뜀', 'info');
+    }
+  }
+
+  function onStage3Done(msg) {
+    document.getElementById('card-s3').className = 'stage-card done';
+    const dlDiv = document.getElementById('s3-download');
+    dlDiv.style.display = 'block';
+    document.getElementById('dl-link').href =
+      `${API}/download/${sessionId}/${msg.filename}`;
+    document.getElementById('dl-link').textContent = `⬇ ${msg.filename} 다운로드`;
+    // Stage 3 검증: 코드 구조 검증 (class, H01_FIELD_MAP 등)
+    const val = msg.validation || {};
+    const passed = Object.values(val).filter(v => v).length;
+    const total = Object.values(val).length;
+    appendLog('s3', `코드 검증: ${passed}/${total} 통과`, passed === total ? 'ok' : 'warn');
+    if (msg.synonym_added > 0) appendLog('s3', `synonym_db: +${msg.synonym_added}개`, 'ok');
+    if (msg.review_recorded > 0) appendLog('s3', `review_history: +${msg.review_recorded}개`, 'ok');
+
+    // Stage 3 검증: H01 매칭 + RTU 통신 검증
+    const st4 = msg.stage4;
+    // Stage 4 PASS = 17/17 H01 + grade=PASS
+    const stage4_pass = msg.stage4_pass === true;
+    if (st4) {
+      const box = document.getElementById('stage4-result');
+      const gradeEl = document.getElementById('stage4-grade');
+      const detailsEl = document.getElementById('stage4-details');
+      // 명시적 stage4_pass 우선, 없으면 grade 사용
+      const grade = stage4_pass ? 'PASS' : (st4.grade || '?');
+      const colors = {
+        PASS: ['#16a34a', '#86efac', '✅'],
+        WARN: ['#d97706', '#fbbf24', '⚠️'],
+        FAIL: ['#dc2626', '#f87171', '❌'],
+      };
+      const [bg, fg, icon] = colors[grade] || ['#475569', '#cbd5e1', '?'];
+      box.style.borderColor = bg;
+      gradeEl.innerHTML = `<span style="color:${fg}">${icon} Stage 4 검증: ${grade}</span>` +
+        `  <span style="color:#9ca3af;font-weight:400">17 H01 표준 필드 · RTU 통신</span>`;
+      // H01 매칭 상태
+      const h01Pct = (st4.h01_pct || 0).toFixed(0);
+      const h01Line = `① H01 매칭 <b style="color:${fg}">${st4.h01_resolved}/${st4.h01_total}</b> (${h01Pct}%)`;
+      // RTU 통신 상태 (주소 + 통신 시뮬)
+      const commOk = (st4.comm_status || '').startsWith('OK');
+      const commColor = commOk ? '#86efac' : '#f87171';
+      const addrOk = (st4.addr_status || '').startsWith('OK');
+      const addrColor = addrOk ? '#86efac' : '#f87171';
+      const rtuLine = `② RTU 통신`
+        + `<br>&nbsp;&nbsp;&nbsp;· 주소 범위 <b style="color:${addrColor}">${st4.addr_status||'?'}</b>`
+        + `<br>&nbsp;&nbsp;&nbsp;· Modbus TCP <b style="color:${commColor}">${st4.comm_status||'?'}</b>`;
+      let warnings = '';
+      if (st4.warnings && st4.warnings.length > 0) {
+        warnings = '<div style="margin-top:6px;color:#fbbf24">⚠ ' +
+          st4.warnings.map(w => w).join('<br>⚠ ') + '</div>';
+      }
+      detailsEl.innerHTML = `${h01Line}<br>${rtuLine}${warnings}`;
+      box.style.display = 'block';
+      appendLog('s3',
+        `Stage 4 검증: ${stage4_pass ? '✅ PASS' : '⚠ ' + grade}  H01 ${st4.h01_resolved}/${st4.h01_total}  RTU ${commOk ? '✓' : '✗'}`,
+        stage4_pass ? 'ok' : 'warn');
+    }
+  }
+
+  function showReview(items) {
+    const area = document.getElementById('review-area');
+    const rows = document.getElementById('review-rows');
+    rows.innerHTML = '';
+    items.forEach((item, i) => {
+      const div = document.createElement('div');
+      div.className = 'review-row';
+      const a1 = item.alt1;
+      const a2 = item.alt2;
+      let html = `<div style="margin-bottom:8px;padding:8px;border:1px solid #444;border-radius:4px;background:#1a1a2e">
+        <div style="font-weight:bold;color:#e0e0e0">${item.address} ${item.definition}</div>
+        <div style="font-size:0.85em;color:#999;margin:2px 0">${item.reason || ''}</div>
+        <div style="margin-top:6px;display:flex;flex-direction:column;gap:4px">`;
+      if (a1) {
+        html += `<label style="color:#81c784;cursor:pointer">
+          <input type="radio" name="rv-${i}" value="ALT1" class="review-radio" data-idx="${i}">
+          <b>추천1</b>: ${a1.definition} → <span style="color:#aed581">${a1.category}</span>
+          <span style="color:#ffffff;font-size:0.8em">(${a1.reason})</span></label>`;
+      }
+      if (a2) {
+        html += `<label style="color:#64b5f6;cursor:pointer">
+          <input type="radio" name="rv-${i}" value="ALT2" class="review-radio" data-idx="${i}">
+          <b>추천2</b>: ${a2.definition} → <span style="color:#90caf9">${a2.category}</span>
+          <span style="color:#ffffff;font-size:0.8em">(${a2.reason})</span></label>`;
+      }
+      html += `<label style="color:#ef9a9a;cursor:pointer">
+          <input type="radio" name="rv-${i}" value="DELETE" class="review-radio" data-idx="${i}">
+          <b>DELETE</b> (제외)</label>
+        <label style="color:#fff59d;cursor:pointer">
+          <input type="radio" name="rv-${i}" value="KEEP" class="review-radio" data-idx="${i}">
+          <b>KEEP</b> (MONITORING으로 포함)</label>
+        </div></div>`;
+      div.innerHTML = html;
+      rows.appendChild(div);
+    });
+    area.style.display = 'block';
+    rows.addEventListener('change', checkAllVerdicts);
+  }
+
+  function checkAllVerdicts() {
+    const total = document.querySelectorAll('[class="review-row"]').length;
+    const checked = document.querySelectorAll('.review-radio:checked').length;
+    if (checked >= total) {
+      // 모든 판정 완료 → REVIEW 미결 표시 제거
+      document.getElementById('card-s3').className = 'stage-card active';
+      const sumEl = document.getElementById('s3-summary');
+      if (sumEl) {
+        sumEl.innerHTML = sumEl.innerHTML
+          .replace(/REVIEW \d+개 미결/, `REVIEW ${total}개 해결`)
+          .replace('color:#fbbf24', 'color:#4ade80');
+      }
+      appendLog('s2', `REVIEW ${total}개 판정 완료`, 'ok');
+
+      // 판정 결과를 WebSocket으로 전송
+      const verdicts = [];
+      document.querySelectorAll('.review-radio:checked').forEach(r => {
+        verdicts.push({row: parseInt(r.dataset.idx), verdict: r.value});
+      });
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({type: 'review_verdicts', verdicts}));
+      }
+
+      // H01 매핑 확인 화면 표시 (Stage 3 버튼은 저장 후 활성화)
+      loadH01Mapping();
+    }
+  }
+
+  // ─── 공용 매핑 패널 (INFO/MPPT) ───────────────────────────────
+  // panelKey: 'info' or 'mppt' — DOM id 와 row class 구분용
+  async function loadSimpleMappingPanel(panelKey, endpoint, label) {
+    const area  = document.getElementById(`${panelKey}-mapping-area`);
+    const table = document.getElementById(`${panelKey}-mapping-table`);
+    const status = document.getElementById(`${panelKey}-mapping-status`);
+    if (!area || !table) return;
+    table.innerHTML = '<span style="color:#9ca3af;font-size:11px">불러오는 중...</span>';
+    area.style.display = 'block';
+
+    try {
+      const r = await fetch(`${API}/${endpoint}/${sessionId}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      const availList = data.available_with_fc || [];
+      // 이름 → 첫 주소 맵 (multiple address handling: 첫번째만)
+      const nameToAddr = {};
+      availList.forEach(it => {
+        const a = (it.addr || '').split('|')[0].split('~')[0].trim();
+        nameToAddr[it.name] = a;
+      });
+
+      table.innerHTML = '';
+      data.fields.forEach(f => {
+        const row = document.createElement('div');
+        row.className = `${panelKey}-row h01-row`;
+        row.dataset.field = f.field;
+        row.dataset.matchSource = f.match_source || '';
+
+        const cls = f.is_matched ? 'h01-matched' : 'h01-unmatched';
+        const icon = f.is_matched ? '✓' : '✗';
+        const ms = f.match_source || '';
+        let sourceTag = '';
+        if (ms === 'der') {
+          sourceTag = '<span class="h01-source-tag h01-tag-der">DER매칭</span>';
+        } else if (ms === 'handler' || ms === 'pdf') {
+          sourceTag = '<span class="h01-source-tag h01-tag-auto">자동매칭</span>';
+        }
+
+        const curName = f.current_register || '';
+        const sugg = f.suggestions || [];
+        // HANDLER 행은 dropdown 비우고 라벨만 표시
+        const isHandler = ms === 'handler';
+        const curAddr = f.current_addr || '';
+        const addrLabel = curAddr
+          ? `<span style="font-size:10px;color:#94a3b8;font-family:monospace">${curAddr}</span>`
+          : '<span></span>';
+
+        // 옵션 빌드 — 첫 주소만 표시
+        let opts = '<option value="">(없음)</option>';
+        if (sugg.length > 0) {
+          opts += '<optgroup label="── 추천 후보 ──">';
+          sugg.forEach(s => {
+            const a = nameToAddr[s] || '';
+            const lbl = a ? `${s} (${a})` : s;
+            const sa = s === curName ? ' selected' : '';
+            opts += `<option value="${s}"${sa}>${lbl}</option>`;
+          });
+          opts += '</optgroup>';
+        }
+        opts += '<optgroup label="── 전체 레지스터 ──">';
+        availList.forEach(it => {
+          const a = nameToAddr[it.name] || '';
+          const lbl = a ? `${it.name} (${a})` : it.name;
+          const sa = it.name === curName ? ' selected' : '';
+          opts += `<option value="${it.name}"${sa}>${lbl}</option>`;
+        });
+        opts += '</optgroup>';
+
+        const selectHtml = isHandler
+          ? `<span style="flex:1;font-size:11px;color:#fbbf24">HANDLER 계산</span>`
+          : `<select class="${panelKey}-select" data-field="${f.field}"
+                     onchange="updateSimpleMappingCounter('${panelKey}')"
+                     style="padding:3px 6px;font-size:11px;flex:1">${opts}</select>`;
+
+        row.innerHTML = `
+          <div class="${cls}" title="${f.description}">${icon} ${f.field}${sourceTag}</div>
+          ${selectHtml}
+          ${addrLabel}`;
+        table.appendChild(row);
+      });
+
+      updateSimpleMappingCounter(panelKey);
+      const matched = data.fields.filter(f => f.is_matched).length;
+      const total = data.fields.length;
+    } catch (err) {
+      table.innerHTML = `<span style="color:#f87171">${label} 매핑 로드 오류: ${err.message}</span>`;
+    }
+  }
+
+  function updateSimpleMappingCounter(panelKey) {
+    const rows = document.querySelectorAll(`#${panelKey}-mapping-table .${panelKey}-row`);
+    let mapped = 0;
+    rows.forEach(row => {
+      const sel = row.querySelector(`.${panelKey}-select`);
+      const ms = row.dataset.matchSource || '';
+      if (ms === 'handler' || ms === 'der' || (sel && sel.value)) mapped++;
+    });
+    const total = rows.length;
+    const status = document.getElementById(`${panelKey}-mapping-status`);
+    if (status) {
+      const color = mapped === total ? '#4ade80' : (mapped >= total*0.75 ? '#fbbf24' : '#f87171');
+      status.innerHTML = `<span style="color:${color};font-weight:700">${mapped}/${total}</span> 매핑됨`;
+    }
+  }
+
+  async function saveSimpleMappingPanel(panelKey, endpoint, label) {
+    const rows = document.querySelectorAll(`#${panelKey}-mapping-table .${panelKey}-row`);
+    const mappings = {};
+    rows.forEach(row => {
+      const sel = row.querySelector(`.${panelKey}-select`);
+      const ms = row.dataset.matchSource || '';
+      if (!sel) return;
+      // HANDLER/DER 자동 매칭 행은 빈값 전송 X
+      if (sel.value || (ms !== 'handler' && ms !== 'der')) {
+        mappings[sel.dataset.field] = sel.value;
+      }
+    });
+    const btn = document.getElementById(`btn-save-${panelKey}-mapping`);
+    if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
+    try {
+      const r = await fetch(`${API}/${endpoint}/${sessionId}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mappings}),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = `✓ ${label} 매핑 저장됨 (${d.updated})`;
+        setTimeout(() => { btn.textContent = `💾 ${label} 매핑 저장`; }, 2000);
+      }
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = `💾 ${label} 매핑 저장`;
+      }
+      alert(`${label} 매핑 저장 오류: ${err.message}`);
+    }
+  }
+
+  function loadInfoMapping() {
+    return loadSimpleMappingPanel('info', 'info-mapping', 'INFO');
+  }
+  function saveInfoMapping() {
+    return saveSimpleMappingPanel('info', 'info-mapping', 'INFO');
+  }
+  function loadMpptMapping() {
+    return loadSimpleMappingPanel('mppt', 'mppt-mapping', 'MPPT');
+  }
+  function saveMpptMapping() {
+    return saveSimpleMappingPanel('mppt', 'mppt-mapping', 'MPPT');
+  }
+
+  // ─── H01 매핑 ──────────────────────────────────────────────────
+  async function loadH01Mapping() {
+    const area = document.getElementById('h01-mapping-area');
+    const table = document.getElementById('h01-mapping-table');
+    const status = document.getElementById('h01-mapping-status');
+    table.innerHTML = '<span style="color:#9ca3af;font-size:11px">불러오는 중...</span>';
+    area.style.display = 'block';
+
+    try {
+      const r = await fetch(`${API}/h01-mapping/${sessionId}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      const avail = data.available_registers || [];
+      const availWithFc = data.available_with_fc || avail.map(n => ({name: n, fcs: []}));
+
+      // FC가 분리된 인버터인지 감지: FC3과 FC4 둘 다 존재하면 분리형
+      const allFcs = new Set();
+      availWithFc.forEach(r => (r.fcs || []).forEach(fc => allFcs.add(fc)));
+      const hasFcSplit = allFcs.has(3) && allFcs.has(4);
+
+      // window 전역에 보관 — onChange 핸들러에서 사용
+      window._h01AvailWithFc = availWithFc;
+      window._h01HasFcSplit = hasFcSplit;
+
+      table.innerHTML = '';
+      data.fields.forEach(f => {
+        const row = document.createElement('div');
+        row.className = 'h01-row';
+        // 매칭 출처 — 카운터 (updateH01Counter) 가 select.value 외에 이 값도 인정
+        row.dataset.matchSource = f.match_source || '';
+        const cls = f.is_matched ? 'h01-matched' : 'h01-unmatched';
+        const icon = f.is_matched ? '✓' : '✗';
+        const sugg = f.suggestions || [];
+        // 매칭 출처 라벨: 'pdf'/'handler' → 자동매칭, 'der' → DER매칭
+        const ms = f.match_source || '';
+        let sourceTag = '';
+        if (ms === 'der') {
+          sourceTag = '<span class="h01-source-tag h01-tag-der">DER매칭</span>';
+        } else if (ms === 'handler' || ms === 'pdf') {
+          sourceTag = '<span class="h01-source-tag h01-tag-auto">자동매칭</span>';
+        }
+
+        // current_register는 backend에서 이미 정리된 깨끗한 NAME
+        const curName = f.current_register || '';
+        const fc = f.fc || 3;
+
+        const fcSel3 = fc === 3 ? ' selected' : '';
+        const fcSel4 = fc === 4 ? ' selected' : '';
+
+        // FC dropdown 색상: ambiguous면 빨강, FC 분리형인데 매칭없음도 빨강 강조
+        const fcAmbig = !!f.fc_ambiguous;
+        const fcStyle = (fcAmbig || (hasFcSplit && !curName))
+          ? 'border:1px solid #f87171;background:#fee2e2;color:#b91c1c;font-weight:700'
+          : '';
+        const fcTitle = fcAmbig
+          ? '이 레지스터는 FC3/FC4 양쪽에 존재합니다 — 어느 쪽인지 선택하세요'
+          : (hasFcSplit ? 'FC3=Holding, FC04=Input' : 'FC');
+
+        // 현재 선택된 레지스터의 주소 (FC별로 다를 수 있음)
+        const curAddr = f.current_addr || '';
+        const addrLabel = curAddr ? `<span class="h01-addr" data-field="${f.h01_field}" style="font-size:10px;color:#94a3b8;margin-left:4px;font-family:monospace">${curAddr}</span>` : `<span class="h01-addr" data-field="${f.h01_field}" style="font-size:10px;color:#94a3b8;margin-left:4px;font-family:monospace"></span>`;
+
+        row.innerHTML = `
+          <div class="${cls}" title="${f.description}">${icon} ${f.h01_field}${sourceTag}</div>
+          <select class="h01-select" data-field="${f.h01_field}"
+                  onchange="onH01RegisterChange(this)"
+                  style="padding:3px 6px;font-size:11px;flex:1"></select>
+          ${addrLabel}
+          <select class="h01-fc" data-field="${f.h01_field}"
+                  onchange="onH01FcChange(this)"
+                  style="padding:3px 4px;font-size:11px;width:42px;${fcStyle}" title="${fcTitle}">
+            <option value="3"${fcSel3}>F3</option><option value="4"${fcSel4}>F4</option>
+          </select>`;
+        table.appendChild(row);
+
+        // 레지스터 옵션 채우기 (FC 필터 적용)
+        const sel = row.querySelector('.h01-select');
+        rebuildH01RegisterOptions(sel, fc, curName, sugg);
+      });
+
+      updateH01Counter();
+      const matched = data.fields.filter(f => f.is_matched).length;
+      const handlerCnt = data.fields.filter(f => f.match_source === 'handler').length;
+      const derCnt = data.fields.filter(f => f.match_source === 'der').length;
+      const total = data.fields.length;
+      const breakdown = (handlerCnt || derCnt)
+        ? ` (HANDLER ${handlerCnt}, DER ${derCnt})` : '';
+      appendLog('s3', `H01 매핑 로드: ${matched}/${total} 자동매칭${breakdown} — 미매칭 ${total - matched}개 수동 매핑 가능`,
+                matched === total ? 'ok' : 'warn');
+    } catch (err) {
+      table.innerHTML = `<span style="color:#f87171">H01 매핑 로드 오류: ${err.message}</span>`;
+    }
+  }
+
+  // 레지스터 드롭다운 옵션 재구성 (FC 필터 적용)
+  function rebuildH01RegisterOptions(sel, fc, curName, suggestions) {
+    const availWithFc = window._h01AvailWithFc || [];
+    const hasFcSplit = window._h01HasFcSplit;
+    const sugg = suggestions || [];
+
+    // FC 분리형이면 선택된 FC를 갖는 레지스터만 표시
+    // 비분리형이면 모두 표시
+    const matchesFc = (fcs) => {
+      if (!hasFcSplit) return true;
+      if (!fcs || fcs.length === 0) return true; // FC 정보 없는 항목은 항상 표시
+      return fcs.includes(fc);
+    };
+
+    // 옵션 라벨에 주소 + FC 정보 포함
+    // - 단일 FC: "POWERFACTOR (FC3 @ 0x0091)"
+    // - 양쪽 FC + 현재 선택된 FC만: "POWERFACTOR (FC3/4 @ 0x0091) ⚠"
+    const optLabel = (info) => {
+      const name = info.name;
+      const fcs = info.fcs || [];
+      const addrs = info.addrs || {};
+      if (fcs.length === 0) return name;
+      if (fcs.length === 1) {
+        const a = addrs[fcs[0]] || '';
+        return a ? `${name} (FC${fcs[0]} @ ${a})` : `${name} (FC${fcs[0]})`;
+      }
+      // 양쪽 FC: 현재 필터된 FC의 주소를 우선 표기
+      const a = addrs[fc] || addrs[fcs[0]] || '';
+      return a ? `${name} (FC${fcs.join('/')} @ ${a}) ⚠` : `${name} (FC${fcs.join('/')}) ⚠`;
+    };
+
+    let opts = '<option value="">(없음)</option>';
+    const filteredSugg = sugg.filter(s => {
+      const info = availWithFc.find(r => r.name === s);
+      return info ? matchesFc(info.fcs) : true;
+    });
+    if (filteredSugg.length > 0) {
+      opts += '<optgroup label="── 추천 후보 ──">';
+      filteredSugg.forEach(s => {
+        const info = availWithFc.find(r => r.name === s) || {name: s, fcs: [], addrs: {}};
+        const selAttr = s === curName ? ' selected' : '';
+        opts += `<option value="${s}"${selAttr}>${optLabel(info)}</option>`;
+      });
+      opts += '</optgroup>';
+    }
+    opts += `<optgroup label="── 전체 추출 레지스터${hasFcSplit ? ' (FC' + fc + ')' : ''} ──">`;
+    availWithFc.forEach(r => {
+      if (!matchesFc(r.fcs)) return;
+      const selAttr = r.name === curName ? ' selected' : '';
+      opts += `<option value="${r.name}"${selAttr}>${optLabel(r)}</option>`;
+    });
+    opts += '</optgroup>';
+    sel.innerHTML = opts;
+
+    // 옵션을 채운 뒤 저장한 값 복원 (필터에서 사라졌으면 빈값)
+    if (curName && [...sel.options].some(o => o.value === curName)) {
+      sel.value = curName;
+    } else {
+      sel.value = '';
+    }
+    // suggestions를 다음 렌더에서 다시 사용할 수 있도록 보관
+    sel.dataset.suggestions = JSON.stringify(sugg);
+  }
+
+  // 주소 라벨 업데이트 헬퍼
+  function updateH01AddrLabel(field, regName, fc) {
+    const addrEl = document.querySelector(`.h01-addr[data-field="${field}"]`);
+    if (!addrEl) return;
+    const availWithFc = window._h01AvailWithFc || [];
+    const info = availWithFc.find(r => r.name === regName);
+    if (info && info.addrs && info.addrs[fc]) {
+      addrEl.textContent = info.addrs[fc];
+      addrEl.style.color = '#94a3b8';
+    } else if (info && info.fcs && info.fcs.length > 0) {
+      // fc 가 안 맞으면 첫 fc 주소 표시
+      const f0 = info.fcs[0];
+      addrEl.textContent = (info.addrs && info.addrs[f0]) || '';
+      addrEl.style.color = '#94a3b8';
+    } else {
+      addrEl.textContent = '';
+    }
+  }
+
+  // 사용자가 레지스터를 변경 → 그 레지스터의 FC가 단일이면 FC 자동확정
+  function onH01RegisterChange(sel) {
+    const field = sel.dataset.field;
+    const fcSel = document.querySelector(`.h01-fc[data-field="${field}"]`);
+    const availWithFc = window._h01AvailWithFc || [];
+    const info = availWithFc.find(r => r.name === sel.value);
+    if (fcSel && info && info.fcs && info.fcs.length === 1) {
+      fcSel.value = String(info.fcs[0]);
+      // 단일 FC로 확정 → 빨강 해제
+      fcSel.style.cssText = 'padding:3px 4px;font-size:11px;width:42px';
+      fcSel.title = 'FC';
+    } else if (fcSel && info && info.fcs && info.fcs.length === 2) {
+      // 양쪽 모두 가능 → ambiguous, 빨강
+      fcSel.style.cssText = 'padding:3px 4px;font-size:11px;width:42px;border:1px solid #f87171;background:#fee2e2;color:#b91c1c;font-weight:700';
+      fcSel.title = '이 레지스터는 FC3/FC4 양쪽에 존재합니다 — 어느 쪽인지 선택하세요';
+    } else if (fcSel) {
+      fcSel.style.cssText = 'padding:3px 4px;font-size:11px;width:42px';
+      fcSel.title = 'FC';
+    }
+    // 주소 라벨 갱신
+    const fcNow = fcSel ? parseInt(fcSel.value) : 3;
+    updateH01AddrLabel(field, sel.value, fcNow);
+    updateH01Counter();
+  }
+
+  // 사용자가 FC를 변경 → 레지스터 드롭다운을 새 FC로 필터링
+  function onH01FcChange(fcSel) {
+    const field = fcSel.dataset.field;
+    const regSel = document.querySelector(`.h01-select[data-field="${field}"]`);
+    if (!regSel) return;
+    const fc = parseInt(fcSel.value);
+    const sugg = JSON.parse(regSel.dataset.suggestions || '[]');
+    rebuildH01RegisterOptions(regSel, fc, regSel.value, sugg);
+    // 사용자가 직접 FC를 골랐으면 빨강 해제
+    fcSel.style.cssText = 'padding:3px 4px;font-size:11px;width:42px';
+    fcSel.title = 'FC';
+    // 주소 라벨 갱신
+    updateH01AddrLabel(field, regSel.value, fc);
+    updateH01Counter();
+  }
+
+  function updateH01Counter() {
+    const rows = document.querySelectorAll('#h01-mapping-table .h01-row');
+    let mapped = 0;
+    rows.forEach(row => {
+      const sel = row.querySelector('.h01-select[data-field]');
+      const ms = row.dataset.matchSource || '';
+      // HANDLER/DER 자동 매칭은 dropdown 값 없어도 매핑된 것으로 인정
+      if (ms === 'handler' || ms === 'der' || (sel && sel.value)) mapped++;
+    });
+    const total = rows.length;
+    const status = document.getElementById('h01-mapping-status');
+    if (status) {
+      const color = mapped === total ? '#4ade80' : (mapped >= total*0.75 ? '#fbbf24' : '#f87171');
+      status.innerHTML = `<span style="color:${color};font-weight:700">${mapped}/${total}</span> 매핑됨`;
+    }
+  }
+
+  async function saveH01Mapping() {
+    const rows = document.querySelectorAll('#h01-mapping-table .h01-row');
+    const mappings = {};
+    rows.forEach(row => {
+      const sel = row.querySelector('.h01-select[data-field]');
+      if (!sel) return;
+      const ms = row.dataset.matchSource || '';
+      // HANDLER/DER 자동 매칭 행은 dropdown 이 비어있어도 col D auto-fill 유지
+      // → 빈 값으로 덮어쓰지 않도록 사용자가 명시 선택한 경우만 전송
+      if (sel.value || (ms !== 'handler' && ms !== 'der')) {
+        mappings[sel.dataset.field] = sel.value;
+      }
+    });
+    const fcSelects = document.querySelectorAll('.h01-fc[data-field]');
+    const fc = {};
+    fcSelects.forEach(s => { fc[s.dataset.field] = parseInt(s.value); });
+
+    const btn = document.getElementById('btn-save-mapping');
+    btn.disabled = true;
+    btn.textContent = '저장 중...';
+
+    try {
+      const r = await fetch(`${API}/h01-mapping/${sessionId}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mappings, fc}),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+
+      document.getElementById('h01-mapping-area').style.display = 'none';
+      document.getElementById('btn-s3').disabled = false;
+      appendLog('s3', `H01 매핑 저장 완료 (${d.updated}개) — Stage 3 실행 가능`, 'ok');
+    } catch (err) {
+      appendLog('s3', `매핑 저장 오류: ${err.message}`, 'err');
+      btn.disabled = false;
+      btn.textContent = '💾 매핑 저장 후 Stage 3 활성화';
+    }
+  }
+
+  // ─── 로그 유틸 ─────────────────────────────────────────────────
+  function appendLog(stage, text, level = '') {
+    const box = document.getElementById(`log-${stage}`);
+    if (!box) return;
+    const span = document.createElement('span');
+    span.className = level;
+    span.textContent = text + '\n';
+    box.appendChild(span);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function clearLog(stage) {
+    const box = document.getElementById(`log-${stage}`);
+    if (box) box.innerHTML = '';
+  }
+</script>
+
+</body>
+</html>

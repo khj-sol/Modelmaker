@@ -1,0 +1,28 @@
+{
+  "manufacturer": "CPS",
+  "source_file": "CPS_Modbus_Comm_User_Manual.pdf",
+  "status_definitions": {
+    "55": "Fault1 Alarm RegisterSeverity - MediumThe inverter",
+    "56": "Fault2 Alarm RegisterSeverity - MediumThe inverter",
+    "57": "Fault3 Alarm Register (23 - 36kW only)Severity - M",
+    "58": "Fault4 Alarm Register (23 - 36kW only)Severity - M"
+  },
+  "alarm_codes": {
+    "15": "Off",
+    "14": "Off",
+    "13": "Off",
+    "12": "Off",
+    "11": "Reserved",
+    "10": "Reserved",
+    "9": "Reserved",
+    "8": "Off",
+    "7": "Reserved",
+    "6": "Off",
+    "5": "Reserved",
+    "4": "Off",
+    "3": "Off",
+    "2": "Off",
+    "1": "Off",
+    "0": "Off"
+  }
+}
