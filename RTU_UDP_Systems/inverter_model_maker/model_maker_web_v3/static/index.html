@@ -258,8 +258,9 @@
       <label>AI 모드</label>
       <select id="ai-mode-select" onchange="onAiModeChange()" style="border-color:#4c1d95;">
         <option value="off">AI 사용 안 함 (Rule-based)</option>
+        <option value="12b" selected>Ollama -- gemma4:12b (recommended, tuned for 8GB VRAM)</option>
         <option value="e2b">Ollama — gemma4:e2b (가장 빠름)</option>
-        <option value="e4b" selected>Ollama — gemma4:e4b (빠름)</option>
+        <option value="e4b">Ollama — gemma4:e4b (빠름)</option>
       </select>
       <div id="ollama-settings" style="margin-top:8px; padding:10px; background:#12151f; border:1px solid #4c1d95; border-radius:6px;">
         <div style="font-size:11px; font-weight:700; color:#a78bfa; margin-bottom:8px;">⚙ Ollama 설정</div>
@@ -409,6 +410,7 @@
   function _aiMode() { return document.getElementById('ai-mode-select').value !== 'off'; }
   function _aiModel() {
     const v = document.getElementById('ai-mode-select').value;
+    if (v === '12b') return 'gemma4:12b';
     if (v === 'e2b') return 'gemma4:e2b';
     if (v === 'e4b') return 'gemma4:e4b';
     return '';
@@ -421,7 +423,7 @@
     if (!isAi && badge) { badge.style.display = 'none'; }
     if (isAi) checkOllamaStatus();
   }
-  // Init: show ollama settings (26b selected by default)
+  // Init: show ollama settings based on the selected AI mode
   setTimeout(() => {
     onAiModeChange();
   }, 0);
