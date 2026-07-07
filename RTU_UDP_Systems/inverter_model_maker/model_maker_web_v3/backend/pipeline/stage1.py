@@ -3032,6 +3032,63 @@ def _extract_literal_scale(text: str) -> Optional[float]:
     return None
 
 
+_ADDR_PATTERNS = [
+    _re.compile(r'0[xX][0-9A-Fa-f]{2,4}'),
+    _re.compile(r'(?<![\w.])(3[0-9]{4}|4[0-9]{4})(?![\w.])'),
+]
+
+
+def _normalize_address_token(token: str) -> Optional[int]:
+    """Normalize a scanned address token into a zero-based register offset."""
+    if not token:
+        return None
+    token = token.strip()
+    if token.lower().startswith('0x'):
+        try:
+            return int(token, 16)
+        except ValueError:
+            return None
+    if _re.fullmatch(r'3\d{4}', token):
+        return int(token) - 30001
+    if _re.fullmatch(r'4\d{4}', token):
+        return int(token) - 40001
+    return None
+
+
+def _scan_addresses_in_text(text: str) -> set:
+    """Deterministically collect address-like tokens from chunk text, normalized to int."""
+    if not text:
+        return set()
+    addresses = set()
+    for pattern in _ADDR_PATTERNS:
+        for match in pattern.finditer(text):
+            normalized = _normalize_address_token(match.group(0))
+            if normalized is not None:
+                addresses.add(normalized)
+    return addresses
+
+
+def _scan_table_rows_for_addresses(tables: list) -> Dict[int, str]:
+    """Collect actionable table-only addresses with their source row text."""
+    row_hits: Dict[int, str] = {}
+    if not tables:
+        return row_hits
+
+    for table in tables:
+        if not table:
+            continue
+        for row in table:
+            if not row:
+                continue
+            normalized_cells = [("" if cell is None else str(cell)).strip() for cell in row]
+            if not any(normalized_cells):
+                continue
+            row_text = " | ".join(normalized_cells)
+            for address in _scan_addresses_in_text(row_text):
+                row_hits.setdefault(address, row_text)
+    return row_hits
+
+
 def _pass1_extract_chunk(client, model: str, chunk_pages: list,
                          chunk_idx: int, progress_cb=None,
                          num_ctx: int = 32768, max_text: int = 60000) -> List[Dict]:
@@ -3523,6 +3580,54 @@ def _run_ai_pdf_extraction(pdf_path: str, ai_settings: dict,
 
     # ── PASS 2: 분류·정제·H01 배정 ─────────────────────────────────────────
     log(f'[Pass2] 분류·정제 시작... ({len(deduped)}개 후보)')
+    llm_addrs = set()
+    for candidate in deduped:
+        addr = candidate.get('address')
+        if isinstance(addr, str):
+            parsed_addr = _normalize_address_token(addr)
+            if parsed_addr is None:
+                parsed_addr = parse_address(addr)
+        else:
+            parsed_addr = parse_address(addr)
+        if parsed_addr is not None:
+            llm_addrs.add(parsed_addr)
+
+    scanned_addrs = set()
+    actionable_rows: Dict[int, str] = {}
+    for page in pages:
+        combined_text = page.get('text', '')
+        page_tables = page.get('tables') or []
+        formatted_tables = _format_page_tables(page_tables)
+        if formatted_tables:
+            combined_text = f'{combined_text}\n{formatted_tables}' if combined_text else formatted_tables
+            actionable_rows.update(_scan_table_rows_for_addresses(page_tables))
+        scanned_addrs.update(_scan_addresses_in_text(combined_text))
+
+    actionable_missed = sorted(set(actionable_rows) - llm_addrs)
+    llm_only_count = len(llm_addrs - scanned_addrs)
+    if llm_only_count:
+        log(f'[Pass1][Recall] LLM-only addresses not seen by scan: {llm_only_count}')
+    if actionable_missed:
+        preview = ', '.join(hex(addr) for addr in actionable_missed[:10])
+        log(
+            f'[Pass1][Recall] LLM missed {len(actionable_missed)} table-scanned addresses: {preview}',
+            'warn',
+        )
+        for addr in actionable_missed[:40]:
+            row_text = actionable_rows.get(addr, '')
+            deduped.append({
+                'address': hex(addr),
+                'raw_name': '(missed by LLM - from table scan)',
+                'data_type': 'U16',
+                'scale': 1,
+                'unit': '',
+                'fc': 3,
+                'rw': 'R',
+                'description': row_text[:120],
+                '_source': 'regex_scan',
+            })
+        log(f'[Pass1][Recall] Added {min(len(actionable_missed), 40)} placeholder candidates for Pass2')
+
     final_registers = _pass2_classify(client, model, deduped, progress, num_ctx=NUM_CTX)
     final_registers = _validate_and_fix_scales(final_registers, progress)
     log(f'[Pass2] 최종 {len(final_registers)}개 레지스터 확정')
