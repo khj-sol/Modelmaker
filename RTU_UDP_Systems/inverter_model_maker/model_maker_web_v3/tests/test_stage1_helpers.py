@@ -17,8 +17,14 @@ class Stage1ImportSmokeTests(unittest.TestCase):
         self.assertIs(module, stage1)
         self.assertIsInstance(stage1._PASS1_JSON_SCHEMA, dict)
         self.assertIsInstance(stage1._PASS2_JSON_SCHEMA, dict)
-        self.assertIsInstance(stage1._PASS1_JSON_SCHEMA["items"]["required"], list)
-        self.assertIsInstance(stage1._PASS2_JSON_SCHEMA["items"]["required"], list)
+        pass1_items = stage1._PASS1_JSON_SCHEMA["items"]
+        pass2_items = stage1._PASS2_JSON_SCHEMA["items"]
+        self.assertIsInstance(pass1_items, dict)
+        self.assertIsInstance(pass2_items, dict)
+        if not isinstance(pass1_items, dict) or not isinstance(pass2_items, dict):
+            self.fail("JSON schema items must be object schemas")
+        self.assertIsInstance(pass1_items["required"], list)
+        self.assertIsInstance(pass2_items["required"], list)
 
 
 class ModelParamBillionsTests(unittest.TestCase):
@@ -135,6 +141,108 @@ class ExtractLiteralScaleTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(stage1._extract_literal_scale(text), expected)
 
+
+class ParseJsonArraySalvageTests(unittest.TestCase):
+    def test_complete_array_matches_json_loads(self) -> None:
+        text = '[{"address":"0x1000"},{"address":"0x1001"}]'
+
+        result = stage1._parse_json_array_salvage(text)
+
+        self.assertEqual(result, [{"address": "0x1000"}, {"address": "0x1001"}])
+
+    def test_fenced_array_parses(self) -> None:
+        text = '```json\n[{"address":"0x1000"}]\n```'
+
+        result = stage1._parse_json_array_salvage(text)
+
+        self.assertEqual(result, [{"address": "0x1000"}])
+
+    def test_truncated_array_recovers_complete_leading_objects(self) -> None:
+        text = (
+            '[{"address":"0x1000","raw_name":"A"},'
+            '{"address":"0x1001","raw_name":"B"},'
+            '{"address":"0x1002","raw_name":"C'
+        )
+
+        result = stage1._parse_json_array_salvage(text)
+
+        self.assertEqual(
+            result,
+            [
+                {"address": "0x1000", "raw_name": "A"},
+                {"address": "0x1001", "raw_name": "B"},
+            ],
+        )
+
+    def test_garbage_without_array_returns_empty_list(self) -> None:
+        self.assertEqual(stage1._parse_json_array_salvage("not json at all"), [])
+
+    def test_truncated_first_object_returns_empty_list(self) -> None:
+        text = '[{"address":"0x1000","raw_name":"A'
+
+        result = stage1._parse_json_array_salvage(text)
+
+        self.assertEqual(result, [])
+
+class ChatWithOptionalThinkTests(unittest.TestCase):
+    def test_accumulates_streamed_content_across_parts(self) -> None:
+        class StubClient:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def chat(self, **kwargs):
+                self.calls.append(kwargs)
+                return iter(
+                    [
+                        {"message": {"content": "Hello "}},
+                        {"message": {"content": "stream"}},
+                        {"message": {"content": " world"}},
+                    ]
+                )
+
+        client = StubClient()
+
+        result = stage1._chat_with_optional_think(client, lambda _msg, _level: None, ValueError, model="demo")
+
+        self.assertEqual(result, {"message": {"content": "Hello stream world"}})
+        self.assertEqual(client.calls, [{"think": False, "stream": True, "model": "demo"}])
+
+    def test_retries_once_without_think_when_server_rejects_param(self) -> None:
+        class StubClient:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def chat(self, **kwargs):
+                self.calls.append(kwargs)
+                if "think" in kwargs:
+                    raise TypeError("unexpected keyword argument 'think'")
+                return iter(
+                    [
+                        {"message": {"content": "retry"}},
+                        {"message": {"content": " ok"}},
+                    ]
+                )
+
+        client = StubClient()
+        logs = []
+
+        result = stage1._chat_with_optional_think(
+            client,
+            lambda msg, level: logs.append((msg, level)),
+            ValueError,
+            model="demo",
+        )
+
+        self.assertEqual(result, {"message": {"content": "retry ok"}})
+        self.assertEqual(
+            client.calls,
+            [
+                {"think": False, "stream": True, "model": "demo"},
+                {"stream": True, "model": "demo"},
+            ],
+        )
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(logs[0][1], "warn")
 
 class ScanAddressesInTextTests(unittest.TestCase):
     def test_scans_hex_and_modbus_reference_notation(self) -> None:

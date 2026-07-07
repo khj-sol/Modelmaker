@@ -3089,6 +3089,52 @@ def _scan_table_rows_for_addresses(tables: list) -> Dict[int, str]:
     return row_hits
 
 
+def _parse_json_array_salvage(text: str, log=None, label: str = '') -> list:
+    """Parse a JSON array, salvaging complete leading objects when the tail is truncated."""
+    cleaned = text.replace('```json', '').replace('```', '').strip()
+    start = cleaned.find('[')
+    end = cleaned.rfind(']') + 1
+    payload = cleaned[start:end] if start >= 0 and end > start else cleaned
+
+    try:
+        return json.loads(payload) if payload else []
+    except json.JSONDecodeError as exc:
+        if start < 0:
+            if log:
+                log(f'[{label}] JSON parse failed: {exc}', 'warn')
+            return []
+
+        decoder = json.JSONDecoder()
+        recovered = []
+        idx = start + 1
+        text_len = len(cleaned)
+        while idx < text_len:
+            while idx < text_len and cleaned[idx] in ' \t\r\n,':
+                idx += 1
+            if idx >= text_len or cleaned[idx] == ']':
+                break
+            try:
+                item, next_idx = decoder.raw_decode(cleaned, idx)
+            except json.JSONDecodeError:
+                break
+            if isinstance(item, dict):
+                recovered.append(item)
+            idx = next_idx
+
+        if recovered:
+            if log:
+                log(
+                    f'[{label}] JSON tail truncated; recovered {len(recovered)} leading items '
+                    '(discarded incomplete tail)',
+                    'warn',
+                )
+            return recovered
+
+        if log:
+            log(f'[{label}] JSON parse failed: {exc}', 'warn')
+        return []
+
+
 def _pass1_extract_chunk(client, model: str, chunk_pages: list,
                          chunk_idx: int, progress_cb=None,
                          num_ctx: int = 32768, max_text: int = 60000) -> List[Dict]:
@@ -3128,9 +3174,13 @@ Document section:
     try:
         import ollama
 
-        options = {'temperature': 0.1, 'num_ctx': num_ctx, 'num_predict': 4096}
+        # Prompt is about 4-5k tokens, so 6144 generation still fits the small-tier 12288 context.
+        options = {'temperature': 0.1, 'num_ctx': num_ctx, 'num_predict': 6144}
         try:
-            resp = client.chat(
+            resp = _chat_with_optional_think(
+                client,
+                log,
+                ollama.ResponseError,
                 model=model,
                 messages=[{'role': 'user', 'content': prompt}],
                 options=options,
@@ -3138,7 +3188,10 @@ Document section:
             )
         except (TypeError, ValueError) as exc:
             log(f'[Pass1 chunk {chunk_idx}] JSON schema format unsupported; using JSON mode: {exc}', 'warn')
-            resp = client.chat(
+            resp = _chat_with_optional_think(
+                client,
+                log,
+                ollama.ResponseError,
                 model=model,
                 messages=[{'role': 'user', 'content': prompt}],
                 options=options,
@@ -3148,7 +3201,10 @@ Document section:
             if 'format' not in str(exc).lower():
                 raise
             log(f'[Pass1 chunk {chunk_idx}] JSON schema format rejected; using JSON mode: {exc}', 'warn')
-            resp = client.chat(
+            resp = _chat_with_optional_think(
+                client,
+                log,
+                ollama.ResponseError,
                 model=model,
                 messages=[{'role': 'user', 'content': prompt}],
                 options=options,
@@ -3158,13 +3214,7 @@ Document section:
         if not raw or not raw.strip():
             log(f'[Pass1 청크{chunk_idx}] 빈 응답 — 건너뜀', 'warn')
             return []
-        text = raw.replace('```json', '').replace('```', '').strip()
-        start = text.find('[')
-        end = text.rfind(']') + 1
-        if start >= 0 and end > start:
-            candidates = json.loads(text[start:end])
-        else:
-            candidates = json.loads(text) if text else []
+        candidates = _parse_json_array_salvage(raw, log=log, label=f'Pass1 chunk {chunk_idx}')
         if isinstance(candidates, list):
             for candidate in candidates:
                 literal_scale = _extract_literal_scale(str(candidate.get('description', '')))
@@ -3294,6 +3344,43 @@ def _build_pass2_few_shot_examples(reference_patterns: Dict[str, Dict[int, str]]
     return '\n'.join(example_lines)
 
 
+def _chat_with_optional_think(client, log, response_error_type, **kwargs):
+    """Call Ollama chat with think disabled when supported, else retry once without it."""
+    def _collect_stream(stream) -> dict:
+        content_parts = []
+        total_chars = 0
+        for part in stream:
+            if isinstance(part, dict):
+                message = part.get('message', {})
+                content = message.get('content', '')
+            else:
+                message = getattr(part, 'message', None)
+                content = getattr(message, 'content', '') if message is not None else ''
+
+            if content:
+                content_parts.append(content)
+                total_chars += len(content)
+                if total_chars > 200_000:
+                    log('[AI] streamed response exceeded 200000 chars; truncating accumulation', 'warn')
+                    break
+
+        return {'message': {'content': ''.join(content_parts)}}
+
+    try:
+        return _collect_stream(client.chat(think=False, stream=True, **kwargs))
+    except TypeError as exc:
+        if 'think' not in str(exc).lower():
+            raise
+    except ValueError as exc:
+        if 'think' not in str(exc).lower():
+            raise
+    except response_error_type as exc:
+        if 'think' not in str(exc).lower():
+            raise
+    log('[AI] think 옵션 미지원 서버 감지, think 없이 재시도', 'warn')
+    return _collect_stream(client.chat(stream=True, **kwargs))
+
+
 def _pass2_classify(client, model: str, candidates: List[Dict],
                     progress_cb=None, num_ctx: int = 32768) -> List[Dict]:
     """Pass 2: 후보 리스트 정제·분류·H01 필드 배정 (Ollama Gemma)."""
@@ -3373,7 +3460,10 @@ Output ONLY a valid JSON array. Each element:
 
         options = {'temperature': 0.1, 'num_ctx': num_ctx, 'num_predict': 8192}
         try:
-            resp = client.chat(
+            resp = _chat_with_optional_think(
+                client,
+                log,
+                ollama.ResponseError,
                 model=model,
                 messages=[{'role': 'user', 'content': prompt}],
                 options=options,
@@ -3381,7 +3471,10 @@ Output ONLY a valid JSON array. Each element:
             )
         except (TypeError, ValueError) as exc:
             log(f'[Pass2] JSON schema format unsupported; using JSON mode: {exc}', 'warn')
-            resp = client.chat(
+            resp = _chat_with_optional_think(
+                client,
+                log,
+                ollama.ResponseError,
                 model=model,
                 messages=[{'role': 'user', 'content': prompt}],
                 options=options,
@@ -3391,7 +3484,10 @@ Output ONLY a valid JSON array. Each element:
             if 'format' not in str(exc).lower():
                 raise
             log(f'[Pass2] JSON schema format rejected; using JSON mode: {exc}', 'warn')
-            resp = client.chat(
+            resp = _chat_with_optional_think(
+                client,
+                log,
+                ollama.ResponseError,
                 model=model,
                 messages=[{'role': 'user', 'content': prompt}],
                 options=options,
@@ -3401,13 +3497,7 @@ Output ONLY a valid JSON array. Each element:
         if not raw or not raw.strip():
             log('[Pass2] 빈 응답 — synonym matches만 반환하고 나머지는 raw 후보로 유지', 'warn')
             return matched_results + unmatched
-        text = raw.replace('```json', '').replace('```', '').strip()
-        start = text.find('[')
-        end = text.rfind(']') + 1
-        if start >= 0 and end > start:
-            result = json.loads(text[start:end])
-        else:
-            result = json.loads(text) if text else []
+        result = _parse_json_array_salvage(raw, log=log, label='Pass2')
         for reg in result:
             if 'bits' in reg and isinstance(reg['bits'], dict):
                 reg['bits'] = {int(k): v for k, v in reg['bits'].items()}
@@ -3484,7 +3574,9 @@ def _run_ai_pdf_extraction(pdf_path: str, ai_settings: dict,
 
     host = ai_settings.get('host', 'http://localhost:11434')
     model = ai_settings.get('model', 'gemma4:12b')
-    client = ollama.Client(host=host, timeout=180)
+    # Streaming changes this to a per-read inactivity timeout instead of a whole-response cap.
+    # Healthy generations emit frequent chunks, so 300s of silence means the server is genuinely stuck.
+    client = ollama.Client(host=host, timeout=300)
 
     # 모델 크기별 파라미터 조정
     try:
