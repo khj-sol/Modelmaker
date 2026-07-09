@@ -1839,6 +1839,51 @@ def _pick_phase_current(candidates: dict, phase_n: int):
     return (None, None)
 
 
+def _reconcile_duplicate_phase_buckets(cands: dict, log=None) -> None:
+    empty_phases = [phase for phase in (1, 2, 3) if not cands.get(phase)]
+    if len(empty_phases) != 1:
+        return
+
+    empty_phase = empty_phases[0]
+    spare_entries = []
+    for phase in (1, 2, 3):
+        bucket = cands.get(phase, [])
+        for candidate in bucket[1:]:
+            if isinstance(getattr(candidate, 'address', None), int):
+                spare_entries.append((phase, candidate))
+    if not spare_entries:
+        return
+
+    if len(spare_entries) == 1:
+        origin_phase, moved = spare_entries[0]
+    else:
+        filled_addresses = []
+        for phase in (1, 2, 3):
+            if phase == empty_phase:
+                continue
+            bucket = cands.get(phase, [])
+            if bucket and isinstance(getattr(bucket[0], 'address', None), int):
+                filled_addresses.append(bucket[0].address)
+        if len(filled_addresses) != 2:
+            return
+        midpoint = sum(filled_addresses) / 2
+        origin_phase, moved = min(
+            spare_entries,
+            key=lambda item: abs(item[1].address - midpoint),
+        )
+
+    cands[origin_phase].remove(moved)
+    cands.setdefault(empty_phase, []).append(moved)
+
+    if log:
+        dup_name = getattr(moved, 'definition', '') or getattr(moved, 'name', '')
+        log(
+            f'[3PH] Reassigned duplicate candidate 0x{moved.address:04X} '
+            f'({dup_name}) into phase {empty_phase}',
+            'warn',
+        )
+
+
 def _detect_phase_type(pages: list, registers: list) -> str:
     """PDF 텍스트 + 레지스터 이름을 종합해 인버터 전원 타입 판단.
 
@@ -2113,6 +2158,7 @@ def build_h01_match_table(categorized: dict, meta: dict) -> List[dict]:
     max_mppt = meta.get('max_mppt', 0)
     max_string = meta.get('max_string', 0)
     phase_type = meta.get('phase_type', 'unknown')
+    log = meta.get('_log')
 
     # 0) Phase-aware r/s/t 후보 수집 + 매칭 결정
     all_cats_for_phase = (categorized.get('MONITORING', []) +
@@ -2120,6 +2166,9 @@ def build_h01_match_table(categorized: dict, meta: dict) -> List[dict]:
                           categorized.get('STATUS', []))
     v_cands = _collect_ac_voltage_candidates(all_cats_for_phase)
     i_cands = _collect_ac_current_candidates(all_cats_for_phase)
+    _reconcile_duplicate_phase_buckets(v_cands['phase'], log)
+    _reconcile_duplicate_phase_buckets(v_cands['line'], log)
+    _reconcile_duplicate_phase_buckets(i_cands, log)
 
     # phase_picks[field] = (reg, source_str, note)
     # source_str: 'PDF_LINE'/'PDF_PHASE'/'PDF_ALIAS_R'
@@ -2380,6 +2429,8 @@ def build_h01_match_table(categorized: dict, meta: dict) -> List[dict]:
     # MPPT voltage를 먼저 모두 수집 → 주소 근접성 검증
     # 단, 노이즈/반대키워드/채널불일치는 v_addrs 빌드에서 제외 (오염 방지)
     mppt_v_addrs = {}  # {n: address}
+    claimed = _seed_claimed_addresses(rows)
+
     for n in range(1, max_mppt + 1):
         v_reg = _find_matched_reg(categorized, f'mppt{n}_voltage')
         if not v_reg or not isinstance(v_reg.address, int):
@@ -2535,19 +2586,27 @@ def build_h01_match_table(categorized: dict, meta: dict) -> List[dict]:
                         reg = better
 
             if reg:
-                rows.append(_make_pdf_match_row(field, reg))
+                row = _make_pdf_match_row(field, reg)
+                if _try_claim_row(row, claimed, log, 'MPPT'):
+                    rows.append(row)
+                else:
+                    rows.append(_make_pdf_match_row(field, None))
             elif mtype == 'voltage':
                 # voltage 없으면 current 주소 - 1 로 추정 (MPPT V/I 쌍 패턴)
                 cur_reg = _find_matched_reg(categorized, f'mppt{n}_current')
                 if cur_reg and isinstance(cur_reg.address, int):
                     est_addr = cur_reg.address - 1
-                    rows.append({
+                    estimated_row = {
                         'field': field, 'source': 'PDF', 'status': 'O',
                         'address': f'0x{est_addr:04X}',
                         'definition': f'MPPT_{n}_VOLTAGE (추정)',
                         'type': 'U16', 'unit': 'V', 'scale': '0.1',
                         'note': f'current({cur_reg.address_hex}) -1 주소 추정',
-                    })
+                    }
+                    if _try_claim_row(estimated_row, claimed, log, 'MPPT'):
+                        rows.append(estimated_row)
+                    else:
+                        rows.append(_make_pdf_match_row(field, None))
                 else:
                     rows.append(_make_pdf_match_row(field, None))
             elif mtype == 'current':
@@ -2616,12 +2675,63 @@ def build_h01_match_table(categorized: dict, meta: dict) -> List[dict]:
     # PDF 표 추출 (pymupdf find_tables) 이 페이지 경계/병합 셀에서 한 줄 흘릴 때
     # 인접 mppt(n-1), mppt(n+1) 또는 string(n-1), string(n+1) 가 균일 stride 면
     # 누락된 n 행의 주소를 보간하여 매칭 처리.
-    _interpolate_stride_gaps(rows)
+    _interpolate_stride_gaps(rows, claimed=claimed, log=log)
 
     return rows
 
 
-def _interpolate_stride_gaps(rows: List[dict]) -> None:
+def _register_width(data_type: str) -> int:
+    return 2 if (data_type or '').upper() in ('U32', 'S32') else 1
+
+
+def _addr_span(addr: int, data_type: str) -> set:
+    return {addr + offset for offset in range(_register_width(data_type))}
+
+
+def _parse_single_address(address) -> Optional[int]:
+    if not address:
+        return None
+    address_str = str(address).strip()
+    if address_str == '-' or '~' in address_str:
+        return None
+    try:
+        return int(address_str, 16)
+    except (ValueError, TypeError):
+        return None
+
+
+def _seed_claimed_addresses(rows: List[dict]) -> set:
+    claimed = set()
+    for row in rows:
+        if row.get('status') != 'O':
+            continue
+        addr = _parse_single_address(row.get('address'))
+        if addr is None:
+            continue
+        claimed.update(_addr_span(addr, row.get('type', '')))
+    return claimed
+
+
+def _try_claim_row(row: dict, claimed: set, log=None, scope: str = 'H01') -> bool:
+    if row.get('status') != 'O':
+        return True
+    addr = _parse_single_address(row.get('address'))
+    if addr is None:
+        return True
+    span = _addr_span(addr, row.get('type', ''))
+    if span & claimed:
+        if log:
+            log(
+                f'[{scope}] Rejecting {row.get("field", "")} at 0x{addr:04X} '
+                'because the register span overlaps an existing H01 assignment',
+                'warn',
+            )
+        return False
+    claimed.update(span)
+    return True
+
+
+def _interpolate_stride_gaps(rows: List[dict], claimed=None, log=None) -> None:
     """mppt{n}_voltage/current, string{n}_current 의 단일 행 누락을 stride 보간."""
     import re as _re
 
@@ -2631,20 +2741,9 @@ def _interpolate_stride_gaps(rows: List[dict]) -> None:
             return None
         return (m.group(1), int(m.group(2)), m.group(3))
 
-    def _parse_addr(addr_str):
-        if not addr_str or addr_str == '-' or '~' in str(addr_str):
-            return None
-        try:
-            return int(addr_str, 16)
-        except (ValueError, TypeError):
-            return None
-
     field_to_idx = {r.get('field', ''): i for i, r in enumerate(rows)}
-    used_addrs = set()
-    for r in rows:
-        a = _parse_addr(r.get('address', ''))
-        if a is not None:
-            used_addrs.add(a)
+    if claimed is None:
+        claimed = _seed_claimed_addresses(rows)
 
     def _get_addr(family, idx, kind):
         f = f'{family}{idx}_{kind}'
@@ -2653,7 +2752,7 @@ def _interpolate_stride_gaps(rows: List[dict]) -> None:
         r = rows[field_to_idx[f]]
         if r.get('status') != 'O':
             return None
-        return _parse_addr(r.get('address', ''))
+        return _parse_single_address(r.get('address', ''))
 
     for i, row in enumerate(rows):
         if row.get('status') == 'O':
@@ -2692,7 +2791,7 @@ def _interpolate_stride_gaps(rows: List[dict]) -> None:
                 predicted = prev_addr + stride
                 method = 'backward extrap'
 
-        if predicted is None or predicted in used_addrs:
+        if predicted is None:
             continue
 
         # 인접 행에서 type/unit/scale 템플릿 복사
@@ -2705,7 +2804,7 @@ def _interpolate_stride_gaps(rows: List[dict]) -> None:
         if template is None:
             continue
 
-        rows[i] = {
+        interpolated_row = {
             'field': row['field'],
             'source': 'PDF_INTERP',
             'status': 'O',
@@ -2716,7 +2815,8 @@ def _interpolate_stride_gaps(rows: List[dict]) -> None:
             'scale': template.get('scale', ''),
             'note': f'stride 보간 ({method}) — 인접 행으로부터 주소 추정',
         }
-        used_addrs.add(predicted)
+        if _try_claim_row(interpolated_row, claimed, log, 'MPPT'):
+            rows[i] = interpolated_row
 
 
 def _find_matched_reg(categorized: dict, h01_field: str, cat: str = None) -> Optional[RegisterRow]:
@@ -3523,6 +3623,32 @@ _SCALE_CONVENTION = {
 }
 
 
+_ALARM_CATEGORY_KEYWORDS = (
+    'abnormal',
+    'fault',
+    'alarm',
+    'error',
+    'trip',
+    'protection',
+    'warning',
+)
+
+
+def _apply_alarm_category_safety_net(registers: List[Dict], log=None) -> List[Dict]:
+    reclassified = 0
+    for reg in registers:
+        category = (reg.get('category') or '').upper()
+        if category in ('ALARM', 'CONTROL', 'DEVICE_INFO'):
+            continue
+        text = f"{reg.get('name', '')} {reg.get('description', '')}".lower()
+        if any(keyword in text for keyword in _ALARM_CATEGORY_KEYWORDS):
+            reg['category'] = 'ALARM'
+            reclassified += 1
+    if log and reclassified:
+        log(f'[AI] Alarm category safety net reclassified {reclassified} registers into ALARM', 'warn')
+    return registers
+
+
 def _validate_and_fix_scales(registers: List[Dict], log=None) -> List[Dict]:
     """Flag or correct decade-scale mismatches against project conventions."""
     fixed = 0
@@ -3721,6 +3847,7 @@ def _run_ai_pdf_extraction(pdf_path: str, ai_settings: dict,
         log(f'[Pass1][Recall] Added {min(len(actionable_missed), 40)} placeholder candidates for Pass2')
 
     final_registers = _pass2_classify(client, model, deduped, progress, num_ctx=NUM_CTX)
+    final_registers = _apply_alarm_category_safety_net(final_registers, progress)
     final_registers = _validate_and_fix_scales(final_registers, progress)
     log(f'[Pass2] 최종 {len(final_registers)}개 레지스터 확정')
 
@@ -4735,6 +4862,7 @@ def run_stage1(
         if relabeled:
             log(f'  Solis 후처리: {relabeled}개 레지스터를 string{{n}}_current 로 재매핑')
 
+    meta['_log'] = log
     h01_match_table = build_h01_match_table(categorized, meta)
 
     # ── 5가지 섹션 후보 제안 ──
@@ -5958,6 +6086,13 @@ def _suggest_candidates(x_field: str, all_regs: list, categorized: dict) -> list
     candidates = []
 
     # 필드별 검색 키워드 + 단위 + 타입 힌트
+    _ALARM_HINTS = {
+        'keywords': ['fault code', 'error code', 'alarm code', 'faultcode',
+                     'warningcode', 'warning code', 'fault status',
+                     'fault register', 'alarm register', 'error register'],
+        'word_boundary': ['fault', 'alarm', 'error', 'warning', 'abnormal'],
+        'type_pref': ['U16', 'U32'],
+    }
     _FIELD_HINTS = {
         'pv_power': {
             'keywords': ['dc power', 'pv power', 'input power', 'total power', 'pac',
@@ -5992,7 +6127,10 @@ def _suggest_candidates(x_field: str, all_regs: list, categorized: dict) -> list
             'word_boundary': ['fault', 'alarm', 'error', 'warning'],  # \b 단어경계 매칭
             'type_pref': ['U16', 'U32'],
         },
+        'alarm2': _ALARM_HINTS,
+        'alarm3': _ALARM_HINTS,
     }
+    _FIELD_HINTS['alarm1'] = _ALARM_HINTS
 
     # MPPT/String X → 기본 후보 없음 (패턴 감지 문제)
     if 'mppt' in x_field or 'string' in x_field:

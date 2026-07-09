@@ -256,5 +256,95 @@ class ScanAddressesInTextTests(unittest.TestCase):
         self.assertEqual(stage1._scan_addresses_in_text(text), set())
 
 
+class ClaimedAddressSpanTests(unittest.TestCase):
+    def test_addr_span_expands_32bit_registers(self) -> None:
+        self.assertEqual(stage1._addr_span(0x1399, "U32"), {0x1399, 0x139A})
+        self.assertEqual(stage1._addr_span(0x1393, "U16"), {0x1393})
+
+    def test_claimed_addresses_block_implicit_second_word_collisions(self) -> None:
+        rows = [
+            {
+                "field": "pv_power",
+                "source": "PDF",
+                "status": "O",
+                "address": "0x1399",
+                "definition": "PV_POWER",
+                "type": "U32",
+                "unit": "W",
+                "scale": "1",
+                "note": "",
+            }
+        ]
+        claimed = stage1._seed_claimed_addresses(rows)
+        accepted = {
+            "field": "mppt1_voltage",
+            "source": "PDF",
+            "status": "O",
+            "address": "0x1393",
+            "definition": "MPPT_1_VOLTAGE (estimated)",
+            "type": "U16",
+            "unit": "V",
+            "scale": "0.1",
+            "note": "",
+        }
+        rejected = {
+            "field": "mppt4_current",
+            "source": "PDF_INTERP",
+            "status": "O",
+            "address": "0x139A",
+            "definition": "MPPT4_CURRENT (stride)",
+            "type": "U16",
+            "unit": "A",
+            "scale": "0.1",
+            "note": "",
+        }
+
+        self.assertTrue(stage1._try_claim_row(accepted, claimed))
+        self.assertFalse(stage1._try_claim_row(rejected, claimed))
+
+
+class ReconcileDuplicatePhaseBucketsTests(unittest.TestCase):
+    def test_moves_spare_candidate_into_empty_phase_bucket(self) -> None:
+        reg_139d = stage1.RegisterRow(definition="L1_CURRENT", address=0x139D)
+        reg_139e = stage1.RegisterRow(definition="L1_CURRENT", address=0x139E)
+        reg_139f = stage1.RegisterRow(definition="L2_CURRENT", address=0x139F)
+        current_candidates = {1: [reg_139d, reg_139e], 2: [reg_139f], 3: []}
+
+        stage1._reconcile_duplicate_phase_buckets(current_candidates)
+
+        self.assertEqual(len(current_candidates[1]), 1)
+        self.assertEqual(len(current_candidates[3]), 1)
+        self.assertIs(current_candidates[3][0], reg_139e)
+
+
+class AlarmCategorySafetyNetTests(unittest.TestCase):
+    def test_reclassifies_alarm_like_monitoring_registers_only(self) -> None:
+        registers = [
+            {"name": "PV5 abnormal", "description": "", "category": "MONITORING"},
+            {"name": "L1_VOLTAGE", "description": "", "category": "MONITORING"},
+        ]
+
+        result = stage1._apply_alarm_category_safety_net(registers)
+
+        self.assertEqual(result[0]["category"], "ALARM")
+        self.assertEqual(result[1]["category"], "MONITORING")
+
+
+class SuggestCandidatesAlarmTests(unittest.TestCase):
+    def test_alarm2_suggests_abnormal_registers(self) -> None:
+        all_regs = [
+            stage1.RegisterRow(definition="PV5 abnormal", address=0x5001, data_type="U16"),
+            stage1.RegisterRow(definition="Device abnormal", address=0x5002, data_type="U16"),
+        ]
+
+        candidates = stage1._suggest_candidates("alarm2", all_regs, {})
+        candidates_by_definition = {candidate["definition"]: candidate for candidate in candidates}
+
+        self.assertIn("PV5 abnormal", candidates_by_definition)
+        self.assertIn("Device abnormal", candidates_by_definition)
+        self.assertGreaterEqual(candidates_by_definition["PV5 abnormal"]["score"], 40)
+        self.assertGreaterEqual(candidates_by_definition["Device abnormal"]["score"], 40)
+
+
 if __name__ == "__main__":
     unittest.main()
